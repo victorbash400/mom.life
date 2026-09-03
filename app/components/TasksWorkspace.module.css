@@ -1,6 +1,6 @@
-.workspace { position: absolute; inset: clamp(25px, 4%, 38px) clamp(32px, 6%, 72px) clamp(25px, 4%, 38px); display: grid; min-height: 0; grid-template-rows: auto auto auto minmax(0, 1fr); gap: 17px; color: #30302e; animation: workspace-in 360ms 70ms cubic-bezier(.22, 1, .36, 1) both; }
-.newTask { display: flex; height: 32px; padding: 0 12px; align-items: center; gap: 6px; border: 0; border-radius: 9px; color: #fff; background: #b8736d; font-size: 11px; white-space: nowrap; cursor: pointer; }
-.newTask:hover { background: #a86660; }
+.workspace { position: absolute; inset: clamp(25px, 4%, 38px) clamp(32px, 6%, 72px) clamp(25px, 4%, 38px); display: grid; min-height: 0; grid-template-rows: auto auto auto minmax(0, 1fr); gap: 16px; color: #30302e; animation: workspace-in 360ms 70ms cubic-bezier(.22, 1, .36, 1) both; }
+.newTask { display: flex; height: 34px; padding: 0 14px; align-items: center; gap: 7px; border: 1px solid rgb(163 94 88 / 18%); border-radius: 17px; color: #fff; background: #b8736d; box-shadow: inset 0 1px rgb(255 255 255 / 24%), 0 7px 18px rgb(106 62 57 / 12%); font-size: 11px; white-space: nowrap; cursor: pointer; transition: background-color 160ms ease, box-shadow 160ms ease; }
+.newTask:hover { background: #aa6963; box-shadow: inset 0 1px rgb(255 255 255 / 24%), 0 9px 22px rgb(106 62 57 / 17%); }
 .newTask svg { width: 14px; height: 14px; }
 .error { margin: 0; color: #a5322d; font-size: 11px; }
 @media (max-width: 680px) { .workspace { inset: 22px 20px 20px; } }

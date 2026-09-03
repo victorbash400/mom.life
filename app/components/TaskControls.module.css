@@ -1,7 +1,7 @@
 .controls { display: flex; align-items: center; justify-content: space-between; gap: 14px; }
-.controls nav { display: flex; padding: 3px; border-radius: 11px; background: rgb(232 211 204 / 56%); }
-.controls nav button { height: 28px; padding: 0 10px; border: 0; border-radius: 8px; color: #987c74; background: transparent; font-size: 10px; cursor: pointer; }
-.controls nav button:hover { color: #6d514b; background: rgb(255 255 255 / 45%); }
-.controls nav button[aria-current="page"] { color: #684a45; background: #fffaf6; box-shadow: 0 1px 5px rgb(97 65 56 / 9%); }
-.controls > span { display: flex; gap: 7px; }
+.controls nav { display: flex; padding: 2px; border-radius: 18px; background: #faf6f4; box-shadow: 0 4px 14px rgb(83 52 44 / 7%), inset 0 0 0 1px rgb(255 255 255 / 82%); }
+.controls nav button { height: 30px; padding: 0 12px; border: 0; border-radius: 14px; color: #987c74; background: transparent; font-size: 10px; cursor: pointer; transition: color 160ms ease, background-color 160ms ease; }
+.controls nav button:hover { color: #6d514b; background: #f2e6e2; }
+.controls nav button[aria-current="page"] { color: #684a45; background: #ead8d3; }
+.controls > span { display: flex; gap: 9px; }
 @media (max-width: 760px) { .controls { align-items: flex-start; flex-direction: column; } .controls nav { max-width: 100%; overflow-x: auto; } }
