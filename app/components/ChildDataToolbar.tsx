@@ -1,0 +1,11 @@
+import { ChevronLeft, ChevronRight, Columns3, LayoutGrid, List, ListFilter, Search } from "lucide-react";
+import type { ChildDataSort, ChildDataView } from "../types/childData";
+import { ChildDataBreadcrumbs } from "./ChildDataBreadcrumbs";
+import styles from "./ChildDataToolbar.module.css";
+
+const modes = [{ mode: "grid", label: "Grid view", icon: LayoutGrid }, { mode: "list", label: "List view", icon: List }, { mode: "columns", label: "Column view", icon: Columns3 }] as const;
+type Props = { canGoBack: boolean; childName: string; folderName?: string; query: string; sort: ChildDataSort; view: ChildDataView; onBack: () => void; onQueryChange: (value: string) => void; onRoot: () => void; onSortChange: (sort: ChildDataSort) => void; onViewChange: (view: ChildDataView) => void };
+
+export function ChildDataToolbar({ canGoBack, childName, folderName, query, sort, view, onBack, onQueryChange, onRoot, onSortChange, onViewChange }: Props) {
+  return <header className={styles.toolbar}><nav className={styles.history} aria-label="History"><button aria-label="Back" disabled={!canGoBack} onClick={onBack} type="button"><ChevronLeft /></button><button aria-label="Forward" disabled type="button"><ChevronRight /></button></nav><ChildDataBreadcrumbs childName={childName} folderName={folderName} onRoot={onRoot} /><label className={styles.search}><Search aria-hidden="true" /><input aria-label={`Search ${childName} information`} onChange={(event) => onQueryChange(event.target.value)} placeholder="Search" type="search" value={query} /></label><nav className={styles.tools} aria-label="View and information actions"><span className={styles.viewModes}>{modes.map(({ mode, label, icon: Icon }) => <button aria-label={label} aria-pressed={view === mode} key={mode} onClick={() => onViewChange(mode)} title={label} type="button"><Icon /></button>)}</span><label className={styles.sort} title="Sort items"><ListFilter aria-hidden="true" /><select aria-label="Sort items" onChange={(event) => onSortChange(event.target.value as ChildDataSort)} value={sort}><option value="name-asc">Name</option><option value="name-desc">Name, reverse</option><option value="date-desc">Newest</option><option value="date-asc">Oldest</option></select></label></nav></header>;
+}

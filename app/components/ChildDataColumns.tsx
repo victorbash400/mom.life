@@ -1,0 +1,8 @@
+import { ChevronRight } from "lucide-react";
+import type { ChildDataNode } from "../types/childData";
+import { ChildDataPreview } from "./ChildDataPreview";
+import { PinkFolderIcon } from "./PinkFolderIcon";
+import styles from "./ChildDataColumns.module.css";
+export function ChildDataColumns({ nodes, selected, onSelect }: { nodes: ChildDataNode[]; selected?: ChildDataNode; onSelect: (node: ChildDataNode) => void }) { const root = sortByName(nodes.filter((node) => node.parentId === null)); const folder = selected?.kind === "folder" ? selected : selected?.parentId ? nodes.find((node) => node.id === selected.parentId) : undefined; const children = folder ? sortByName(nodes.filter((node) => node.parentId === folder.id)) : []; const preview = selected?.kind !== "folder" ? selected : undefined; return <section className={styles.browser} aria-label="Column view"><Column nodes={root} selectedId={folder?.id ?? selected?.id} onSelect={onSelect} />{folder ? <Column nodes={children} selectedId={selected?.id} onSelect={onSelect} /> : null}{preview ? <ChildDataPreview node={preview} /> : null}</section>; }
+function Column({ nodes, selectedId, onSelect }: { nodes: ChildDataNode[]; selectedId?: string; onSelect: (node: ChildDataNode) => void }) { return <div className={styles.column}>{nodes.map((node) => <button aria-pressed={selectedId === node.id} key={node.id} onClick={() => onSelect(node)} type="button"><PinkFolderIcon kind={node.kind} size="small"/><span>{node.name}</span>{node.kind === "folder" ? <ChevronRight /> : null}</button>)}</div>; }
+function sortByName(nodes: ChildDataNode[]) { return [...nodes].sort((left, right) => left.name.localeCompare(right.name, undefined, { numeric: true })); }
