@@ -1,1 +1,1 @@
-.shell { position: relative; width: 100vw; height: 100dvh; overflow: hidden; background: #fff; }
+.shell { position: relative; width: 100vw; height: 100dvh; min-height: 640px; overflow: hidden; background: #eee1d4 url("/mom-life-background.png") center / cover no-repeat; }

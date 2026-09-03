@@ -1,5 +1,0 @@
-.toggle { position: absolute; top: 10px; left: 12px; z-index: 4; display: grid; width: 26px; height: 26px; padding: 0; place-items: center; color: #686864; border: 0; border-radius: 8px; background: rgb(255 255 255 / 34%); cursor: pointer; transition: left 220ms cubic-bezier(.2, .8, .2, 1), background 140ms ease, color 140ms ease; }
-.toggle[data-open="true"] { left: 144px; }
-.toggle:hover { color: #20201e; background: #f3f3f1; }
-.toggle:focus-visible { outline: 2px solid #7c6cff; outline-offset: 2px; }
-.toggle svg { width: 15px; height: 15px; stroke-width: 1.7; }

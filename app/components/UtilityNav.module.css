@@ -1,0 +1,5 @@
+.nav { position: absolute; right: 0; bottom: clamp(45px, 8.2vh, 89px); left: 0; display: flex; justify-content: center; gap: clamp(28px, 4.1vw, 60px); }
+.nav button { display: grid; width: clamp(56px, 5.6vw, 81px); height: clamp(56px, 5.6vw, 81px); padding: 0; place-items: center; color: #947152; border: 1px solid rgb(182 142 111 / 15%); border-radius: 50%; background: rgb(255 250 243 / 53%); box-shadow: 0 7px 20px rgb(91 65 50 / 8%), inset 0 1px rgb(255 255 255 / 76%); cursor: pointer; }
+.nav svg { width: clamp(25px, 2.6vw, 37px); height: clamp(25px, 2.6vw, 37px); stroke-width: 1.65; }
+.nav button:hover { color: #ae7568; background: rgb(255 250 243 / 82%); }
+@media (max-width: 620px) { .nav { gap: 14px; } }
