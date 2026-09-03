@@ -1,0 +1,2 @@
+.list { min-height: 0; overflow-y: auto; overscroll-behavior: contain; scrollbar-width: thin; scrollbar-color: #dfc5bd transparent; }
+.list > div { display: grid; width: min(680px, 100%); margin: 0 auto; padding: 18px 2px; gap: 17px; }

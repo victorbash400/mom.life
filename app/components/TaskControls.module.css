@@ -1,0 +1,10 @@
+.controls { display: flex; align-items: center; justify-content: space-between; gap: 14px; }
+.controls nav { display: flex; padding: 3px; border-radius: 11px; background: rgb(232 211 204 / 56%); }
+.controls nav button { height: 28px; padding: 0 10px; border: 0; border-radius: 8px; color: #987c74; background: transparent; font-size: 10px; cursor: pointer; }
+.controls nav button:hover { color: #6d514b; background: rgb(255 255 255 / 45%); }
+.controls nav button[aria-current="page"] { color: #684a45; background: #fffaf6; box-shadow: 0 1px 5px rgb(97 65 56 / 9%); }
+.controls > span { display: flex; gap: 7px; }
+.controls label { position: relative; display: flex; height: 31px; align-items: center; border: 1px solid #e8d6cf; border-radius: 16px; background: rgb(255 255 255 / 65%); }
+.controls label svg { position: absolute; left: 9px; width: 13px; height: 13px; color: #9c7b73; pointer-events: none; }
+.controls select { height: 30px; padding: 0 9px 0 28px; border: 0; outline: 0; color: #765c55; background: transparent; font-size: 10px; cursor: pointer; }
+@media (max-width: 760px) { .controls { align-items: flex-start; flex-direction: column; } .controls nav { max-width: 100%; overflow-x: auto; } }

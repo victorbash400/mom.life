@@ -1,0 +1,7 @@
+.header { display: grid; grid-template-columns: 34px 1fr auto; align-items: center; gap: 11px; }
+.header > button { display: grid; width: 32px; height: 32px; padding: 0; place-items: center; border: 1px solid rgb(185 119 113 / 24%); border-radius: 50%; color: #895e59; background: rgb(255 255 255 / 52%); cursor: pointer; }
+.header > button:hover { background: #f3dfda; }
+.header > button svg { width: 15px; height: 15px; }
+.header > span { display: grid; gap: 3px; }
+.header strong { color: #4b413d; font-family: var(--font-display), Georgia, serif; font-size: 23px; font-weight: 500; letter-spacing: -.025em; }
+.header small { color: #977f77; font-size: 11px; }

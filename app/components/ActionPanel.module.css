@@ -3,10 +3,11 @@
 .panel h1 { position: absolute; top: 16.5%; right: 0; left: 0; margin: 0; color: #4a403b; font-family: var(--font-display), Georgia, serif; font-size: clamp(60px, 6.7vw, 97px); font-weight: 400; letter-spacing: -.06em; line-height: 1; text-align: center; }
 .panel h1 em { color: #b97771; font-family: var(--font-life), Georgia, serif; font-weight: 400; letter-spacing: -.045em; }
 .primaryActions { position: absolute; top: 42.2%; right: 14.4%; left: 14.4%; display: grid; grid-template-columns: 1fr 1fr; gap: 24px; }
-.primaryActions button { display: flex; height: clamp(108px, 13.7vh, 149px); gap: clamp(20px, 3vw, 44px); align-items: center; justify-content: center; border-radius: 999px; font-family: var(--font-display), Georgia, serif; font-size: clamp(27px, 2.7vw, 39px); cursor: pointer; }
+.primaryActions button { display: flex; height: clamp(108px, 13.7vh, 149px); gap: clamp(20px, 3vw, 44px); align-items: center; justify-content: center; border-radius: 999px; font-family: var(--font-display), Georgia, serif; font-size: clamp(27px, 2.7vw, 39px); cursor: pointer; transition: background-color .18s ease, border-color .18s ease, color .18s ease; }
 .primaryActions svg { width: clamp(32px, 3.4vw, 50px); height: clamp(32px, 3.4vw, 50px); stroke-width: 1.4; }
-.chat { color: #fff; border: 1px solid #a76660; background: linear-gradient(145deg, #cf8e86, #ad6964); box-shadow: inset 0 1px rgb(255 255 255 / 26%), 0 10px 27px rgb(112 68 64 / 16%); }
+.ask { color: #fff; border: 1px solid #a76660; background: #bd7771; box-shadow: inset 0 1px rgb(255 255 255 / 26%), 0 10px 27px rgb(112 68 64 / 16%); }
+.ask:hover { background: #ad6863; }
 .tasks { color: #a5625c; border: 1px solid rgb(191 126 113 / 34%); background: rgb(255 247 240 / 47%); box-shadow: inset 0 1px rgb(255 255 255 / 72%), 0 9px 24px rgb(110 75 59 / 6%); }
-.primaryActions button:hover { transform: translateY(-2px); }
+.tasks:hover { border-color: rgb(183 111 101 / 52%); background: rgb(244 222 215 / 58%); }
 @media (max-height: 760px) { .panel h1 { top: 13%; } .primaryActions { top: 39%; } }
 @media (max-width: 760px) { .primaryActions { top: 34%; right: 9%; left: 9%; grid-template-columns: 1fr; gap: 12px; } .primaryActions button { height: 76px; } }

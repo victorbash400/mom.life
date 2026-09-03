@@ -2,6 +2,7 @@
 node_modules/
 backend/.env
 backend/.sessions/
+backend/data/
 backend/__pycache__/
 backend/**/__pycache__/
 *.pyc

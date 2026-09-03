@@ -1,0 +1,3 @@
+.workspace { position: absolute; inset: clamp(25px, 4%, 38px) clamp(32px, 6%, 72px) clamp(25px, 4%, 38px); display: grid; min-height: 0; grid-template-rows: auto minmax(0, 1fr) auto auto; gap: 14px; }
+.error { width: min(680px, 100%); margin: 0 auto; color: #a3453e; font-size: 11px; }
+@media (max-width: 680px) { .workspace { inset: 22px 20px 20px; } }

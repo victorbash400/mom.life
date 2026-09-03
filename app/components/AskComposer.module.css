@@ -1,0 +1,11 @@
+.composer { display: grid; width: min(680px, 100%); min-height: 105px; margin: 0 auto; padding: 12px 13px 10px; grid-template-rows: minmax(0, 1fr) auto; border: 1px solid rgb(188 125 117 / 27%); border-radius: 18px; background: rgb(255 255 255 / 91%); box-shadow: 0 9px 28px rgb(105 68 58 / 11%); }
+.composer textarea { width: 100%; resize: none; border: 0; outline: 0; color: #4b413d; background: transparent; font: inherit; font-size: 13px; line-height: 1.5; }
+.composer textarea::placeholder { color: #a28e87; }
+.composer footer { display: flex; justify-content: space-between; }
+.composer button { display: grid; width: 29px; height: 29px; padding: 0; place-items: center; border: 0; border-radius: 50%; cursor: pointer; }
+.composer svg { width: 15px; height: 15px; stroke-width: 1.8; }
+.attach { color: #846e68; background: transparent; }
+.attach:hover { background: #f4e5df; }
+.send { color: #fff; background: #b8736d; }
+.send:hover { background: #a86660; }
+.send:disabled { color: #a9958e; background: #eadbd5; cursor: default; }
