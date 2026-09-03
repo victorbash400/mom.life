@@ -5,14 +5,18 @@ import { OrganicPanelSurface } from "./OrganicPanelSurface";
 import { TasksWorkspace } from "./TasksWorkspace";
 import { PluginStore } from "./PluginStore";
 import type { useToolConnections } from "../hooks/useToolConnections";
+import type { ChildProfile } from "../types/dashboard";
+import { ChildProfileWorkspace } from "./ChildProfileWorkspace";
+import { ChildInformationWorkspace } from "./ChildInformationWorkspace";
 import { UtilityNav } from "./UtilityNav";
 import styles from "./ActionPanel.module.css";
 
 type Connections = ReturnType<typeof useToolConnections>;
-type ActionPanelProps = { connections: Connections; mode: PanelMode; onModeChange: (mode: PanelMode) => void };
+type ActionPanelProps = { child?: ChildProfile; connections: Connections; mode: PanelMode; onModeChange: (mode: PanelMode) => void; onReturnHome: () => void };
 
-export function ActionPanel({ connections, mode, onModeChange }: ActionPanelProps) {
-  return <section className={styles.panel} data-mode={mode}><OrganicPanelSurface mode={mode} />{mode === "home" ? <HomeActions connections={connections} onModeChange={onModeChange} /> : null}{mode === "ask" ? <AskWorkspace onClose={() => onModeChange("home")} /> : null}{mode === "tasks" ? <TasksWorkspace onClose={() => onModeChange("home")} /> : null}{mode === "plugins" ? <PluginStore connectedIds={connections.connectedIds} onBack={() => onModeChange("home")} onConnect={connections.connect} onDisconnect={connections.disconnect} /> : null}</section>;
+export function ActionPanel({ child, connections, mode, onModeChange, onReturnHome }: ActionPanelProps) {
+  const closeTasks = child ? () => onModeChange("child") : () => onModeChange("home");
+  return <section className={styles.panel} data-mode={mode}><OrganicPanelSurface mode={mode} />{mode === "home" ? <HomeActions connections={connections} onModeChange={onModeChange} /> : null}{mode === "ask" ? <AskWorkspace onClose={() => onModeChange("home")} /> : null}{mode === "tasks" ? <TasksWorkspace initialChild={child?.id} onClose={closeTasks} /> : null}{mode === "plugins" ? <PluginStore connectedIds={connections.connectedIds} onBack={() => onModeChange("home")} onConnect={connections.connect} onDisconnect={connections.disconnect} /> : null}{mode === "child" && child ? <ChildProfileWorkspace child={child} onBack={onReturnHome} onInformation={() => onModeChange("child-info")} onTasks={() => onModeChange("tasks")} /> : null}{mode === "child-info" && child ? <ChildInformationWorkspace child={child} onBack={() => onModeChange("child")} /> : null}</section>;
 }
 
 function HomeActions({ connections, onModeChange }: Pick<ActionPanelProps, "connections" | "onModeChange">) {
