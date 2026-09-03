@@ -1,4 +1,6 @@
-import type { ChildProfile } from "../types/dashboard";
+import type { ChildProfile, PersonProfile } from "../types/dashboard";
+
+export const sarah: PersonProfile = { id: "sarah", name: "Sarah" };
 
 export const children: ChildProfile[] = [
   { id: "amina", name: "Amina", age: "8 years", color: "#d9caef", avatarPosition: "100% 0%" },

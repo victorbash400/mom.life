@@ -1,8 +1,8 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { childData } from "../data/childData";
-import type { ChildProfile } from "../types/dashboard";
+import { profileData } from "../data/childData";
+import type { PersonProfile } from "../types/dashboard";
 import type { ChildDataNode, ChildDataSort, ChildDataView } from "../types/childData";
 import { ChildDataColumns } from "./ChildDataColumns";
 import { ChildDataGrid } from "./ChildDataGrid";
@@ -10,8 +10,8 @@ import { ChildDataList } from "./ChildDataList";
 import { ChildDataToolbar } from "./ChildDataToolbar";
 import styles from "./ChildInformationWorkspace.module.css";
 
-export function ChildInformationWorkspace({ child, onBack }: { child: ChildProfile; onBack: () => void }) {
-  const nodes = useMemo(() => childData(child), [child]);
+export function ChildInformationWorkspace({ profile, child = false, onBack }: { profile: PersonProfile; child?: boolean; onBack: () => void }) {
+  const nodes = useMemo(() => profileData(profile, child), [child, profile]);
   const [folderId, setFolderId] = useState<string>();
   const [selectedId, setSelectedId] = useState<string>();
   const [view, setView] = useState<ChildDataView>("grid");
@@ -51,5 +51,5 @@ export function ChildInformationWorkspace({ child, onBack }: { child: ChildProfi
     setSelectedId(undefined);
   }
 
-  return <section className={styles.information}><ChildDataToolbar canGoBack childName={child.name} folderName={folder?.name} onBack={back} onQueryChange={setQuery} onRoot={root} onSortChange={setSort} onViewChange={changeView} query={query} sort={sort} view={view} /><section className={styles.content}>{view === "grid" ? <ChildDataGrid nodes={visible} onOpen={open} /> : null}{view === "list" ? <ChildDataList nodes={visible} onOpen={open} selectedId={selectedId} /> : null}{view === "columns" ? <ChildDataColumns nodes={nodes} onSelect={(node) => setSelectedId(node.id)} selected={selected} /> : null}</section></section>;
+  return <section className={styles.information}><ChildDataToolbar canGoBack childName={profile.name} folderName={folder?.name} onBack={back} onQueryChange={setQuery} onRoot={root} onSortChange={setSort} onViewChange={changeView} query={query} sort={sort} view={view} /><section className={styles.content}>{view === "grid" ? <ChildDataGrid nodes={visible} onOpen={open} /> : null}{view === "list" ? <ChildDataList nodes={visible} onOpen={open} selectedId={selectedId} /> : null}{view === "columns" ? <ChildDataColumns nodes={nodes} onSelect={(node) => setSelectedId(node.id)} selected={selected} /> : null}</section></section>;
 }

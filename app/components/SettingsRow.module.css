@@ -1,0 +1,1 @@
+.row { display: flex; min-height: 64px; padding: 12px 18px; align-items: center; justify-content: space-between; gap: 22px; }.row + .row { border-top: 1px solid rgb(117 86 77 / 8%); }.row > span { display: grid; min-width: 0; gap: 3px; }.row strong { color: #4b403c; font-size: 12px; font-weight: 590; }.row small { color: #98837d; font-size: 10px; line-height: 1.35; }
