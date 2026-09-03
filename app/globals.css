@@ -8,6 +8,11 @@
 
 * { box-sizing: border-box; }
 
+* { scrollbar-width: thin; scrollbar-color: rgb(171 126 117 / 38%) transparent; }
+*::-webkit-scrollbar { width: 5px; height: 5px; }
+*::-webkit-scrollbar-track { background: transparent; }
+*::-webkit-scrollbar-thumb { border-radius: 999px; background: rgb(171 126 117 / 38%); }
+
 html, body { width: 100%; height: 100%; overflow: hidden; }
 
 body {

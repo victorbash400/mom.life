@@ -5,6 +5,7 @@ import { useState } from "react";
 import { children } from "../data/dashboard";
 import { SettingsRow } from "./SettingsRow";
 import { SettingsSwitch } from "./SettingsSwitch";
+import { ChildSettingsDisclosure } from "./ChildSettingsDisclosure";
 import { WorkspaceHeader } from "./WorkspaceHeader";
 import styles from "./ParentSettingsWorkspace.module.css";
 
@@ -23,7 +24,7 @@ function ProfileSettings({ appointments, taskUpdates, weeklySummary, onAppointme
 }
 
 function ChildSettings({ childUpdates, onChildUpdates }: { childUpdates: boolean; onChildUpdates: (value: boolean) => void }) {
-  return <><SettingsSection title="Children">{children.map((child) => <article className={styles.child} key={child.id}><i style={{ backgroundPosition: child.avatarPosition }} /><span><strong>{child.name}</strong><small>{child.age}</small></span><button type="button">Manage</button></article>)}</SettingsSection><SettingsSection title="Child Management"><SettingsRow control={<SettingsSwitch checked={childUpdates} label="Child activity updates" onChange={onChildUpdates} />} description="Changes to health, school, and activity information" title="Child activity updates" /><SettingsRow control={<button className={styles.add} type="button"><Plus />Add Child</button>} description="Create another child profile" title="Family profiles" /></SettingsSection></>;
+  return <><section className={styles.section}><h2>Children</h2>{children.map((child) => <ChildSettingsDisclosure child={child} key={child.id} />)}</section><SettingsSection title="Family"><SettingsRow control={<SettingsSwitch checked={childUpdates} label="Child activity updates" onChange={onChildUpdates} />} description="Receive changes from every child profile" title="Child activity updates" /><SettingsRow control={<button className={styles.add} type="button"><Plus />Add Child</button>} description="Create another child profile" title="Family profiles" /></SettingsSection></>;
 }
 
 function SettingsSection({ children: content, title }: { children: React.ReactNode; title: string }) { return <section className={styles.section}><h2>{title}</h2><div className={styles.group}>{content}</div></section>; }
