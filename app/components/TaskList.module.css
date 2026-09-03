@@ -2,4 +2,5 @@
 .panel > header { display: flex; padding: 18px 21px 25px; align-items: flex-start; justify-content: space-between; color: #765b54; font-size: 11px; font-weight: 600; }
 .panel > header small { color: #9f847d; font-size: 10px; font-weight: 500; }
 .sheet { min-height: 0; margin: -25px 4px 4px; padding: 11px 18px; overflow-y: auto; border: 1px solid rgb(220 190 181 / 40%); border-radius: 21px; background: rgb(255 253 249 / 92%); box-shadow: 0 8px 24px rgb(79 52 45 / 3%); }
-.empty { margin: 40px 0; color: #9a817a; font-size: 12px; text-align: center; }
+.sheet:has(.empty) { display: grid; place-content: center; }
+.empty { margin: 0; color: #9a817a; font-size: 12px; text-align: center; }
