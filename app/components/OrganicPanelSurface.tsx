@@ -18,7 +18,7 @@ export function OrganicPanelSurface({ mode }: { mode: PanelMode }) {
           <feDropShadow dx="0" dy="19" stdDeviation="18" floodColor="#775144" floodOpacity=".13" />
         </filter>
       </defs>
-      <path
+      <path className={styles.shape}
         d={path}
         fill="url(#panel-fill)"
         stroke="#ffffff"
@@ -26,9 +26,9 @@ export function OrganicPanelSurface({ mode }: { mode: PanelMode }) {
         strokeWidth="2"
         filter="url(#panel-shadow)"
       />
-      <path
+      <path className={styles.shape}
         d={path}
-        transform="translate(14 9) scale(.975 .975)"
+        transform="translate(12 12) scale(.978417 .966574)"
         fill="none"
         stroke="#e9b8b2"
         strokeOpacity=".24"

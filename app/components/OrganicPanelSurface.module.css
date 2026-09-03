@@ -5,3 +5,5 @@
   height: 100%;
   overflow: visible;
 }
+.shape { transition: d 420ms cubic-bezier(.22, 1, .36, 1); }
+@media (prefers-reduced-motion: reduce) { .shape { transition: none; } }

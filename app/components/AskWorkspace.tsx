@@ -41,7 +41,7 @@ export function AskWorkspace({ onClose }: { onClose: () => void }) {
     } finally { setSending(false); }
   }
 
-  return <div className={styles.workspace}><WorkspaceHeader title="Ask" subtitle="Your family assistant" onClose={onClose} /><AskMessageList messages={messages} sending={sending} />{error ? <p className={styles.error} role="alert">{error}</p> : null}<AskComposer disabled={sending} onSend={send} /></div>;
+  return <div className={styles.workspace}><WorkspaceHeader title="Ask" onClose={onClose} /><AskMessageList messages={messages} sending={sending} />{error ? <p className={styles.error} role="alert">{error}</p> : null}<AskComposer disabled={sending} onSend={send} /></div>;
 }
 
 function applyEvent(raw: string, assistantId: string, setMessages: React.Dispatch<React.SetStateAction<AskMessage[]>>) {
