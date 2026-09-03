@@ -1,0 +1,12 @@
+.next/
+node_modules/
+backend/.env
+backend/.sessions/
+backend/__pycache__/
+backend/**/__pycache__/
+*.pyc
+.DS_Store
+*.md
+*.tsbuildinfo
+.venv/
+backend/.venv/

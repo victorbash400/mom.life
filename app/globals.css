@@ -1,0 +1,21 @@
+:root {
+  --ink: #302b31;
+  --muted: #7b7379;
+  --cream: #fbf6ef;
+  --purple: #7d69a7;
+  --purple-dark: #665188;
+}
+
+* { box-sizing: border-box; }
+
+html, body { width: 100%; height: 100%; overflow: hidden; }
+
+body {
+  margin: 0;
+  color: var(--ink);
+  background: #fff;
+  font-family: var(--font-sans), sans-serif;
+}
+
+button, input { font: inherit; }
+button { color: inherit; }
