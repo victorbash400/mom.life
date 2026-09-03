@@ -1,7 +1,7 @@
 .panel { position: absolute; top: var(--panel-top); right: var(--panel-inline); bottom: var(--panel-bottom); left: var(--panel-inline); z-index: 2; }
 .panel > :not(:first-child) { z-index: 1; }
-.panel h1 { position: absolute; top: 16.5%; right: 0; left: 0; margin: 0; color: #4a403b; font-family: var(--font-display), Georgia, serif; font-size: clamp(62px, 7vw, 101px); font-weight: 500; letter-spacing: -.045em; line-height: 1; text-align: center; }
-.panel h1 em { color: #b97771; font-weight: 500; }
+.panel h1 { position: absolute; top: 16.5%; right: 0; left: 0; margin: 0; color: #4a403b; font-family: var(--font-display), Georgia, serif; font-size: clamp(60px, 6.7vw, 97px); font-weight: 400; letter-spacing: -.06em; line-height: 1; text-align: center; }
+.panel h1 em { color: #b97771; font-weight: 400; letter-spacing: -.045em; }
 .primaryActions { position: absolute; top: 42.2%; right: 14.4%; left: 14.4%; display: grid; grid-template-columns: 1fr 1fr; gap: 24px; }
 .primaryActions button { display: flex; height: clamp(108px, 13.7vh, 149px); gap: clamp(20px, 3vw, 44px); align-items: center; justify-content: center; border-radius: 999px; font-family: var(--font-display), Georgia, serif; font-size: clamp(27px, 2.7vw, 39px); cursor: pointer; }
 .primaryActions svg { width: clamp(38px, 4vw, 58px); height: clamp(38px, 4vw, 58px); stroke-width: 1.35; }
