@@ -1,5 +1,5 @@
 .shell {
-  --panel-top: clamp(225px, 30.3vh, 329px);
+  --panel-top: clamp(178px, 25.8vh, 280px);
   --panel-inline: clamp(70px, 12.3vw, 178px);
   --panel-bottom: clamp(30px, 3.6vh, 39px);
   --avatar-size: clamp(72px, 9.4vw, 136px);
@@ -13,7 +13,7 @@
 
 @media (max-width: 760px) {
   .shell {
-    --panel-top: 190px;
+    --panel-top: 168px;
     --panel-inline: 20px;
     --panel-bottom: 20px;
   }
