@@ -17,7 +17,11 @@ export function MomLifeShell() {
   const [selectedChildId, setSelectedChildId] = useState<string>();
   const connections = useToolConnections();
   const selectedChild = children.find((child) => child.id === selectedChildId);
-  function selectChild(id: string) { setSelectedChildId(id); setPluginsOpen(false); setMode("child"); }
+  function selectChild(id: string) {
+    setSelectedChildId(id);
+    setPluginsOpen(false);
+    setMode((current) => current === "child-info" || current === "tasks" ? current : "child");
+  }
   function returnHome() { setSelectedChildId(undefined); setMode("home"); }
   return <main className={styles.shell} data-mode={mode}><AppHeader pluginsOpen={pluginsOpen} onPluginsToggle={() => setPluginsOpen((open) => !open)} />{pluginsOpen ? <PluginQuickMenu connectedIds={connections.connectedIds} onClose={() => setPluginsOpen(false)} onDisconnect={connections.disconnect} onStore={() => { setPluginsOpen(false); setMode("plugins"); }} /> : null}<ChildSwitcher focused={mode === "child" || mode === "child-info" || (mode === "tasks" && Boolean(selectedChild))} onSelect={selectChild} selectedId={selectedChildId} /><ActionPanel child={selectedChild} connections={connections} mode={mode} onModeChange={setMode} onReturnHome={returnHome} /></main>;
 }
