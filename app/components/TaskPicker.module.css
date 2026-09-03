@@ -1,0 +1,10 @@
+.picker { position: relative; }
+.picker > button { display: grid; height: 31px; min-width: 116px; padding: 0 9px; grid-template-columns: 14px minmax(0, 1fr) 13px; align-items: center; gap: 7px; border: 1px solid #e0e0dd; border-radius: 16px; color: #4e4e4a; background: #fff; font-size: 11px; text-align: left; cursor: pointer; }
+.picker > button:hover, .picker > button[aria-expanded="true"] { border-color: #cfb4ad; background: #fffaf7; }
+.picker > button svg { width: 14px; height: 14px; color: #777772; stroke-width: 1.8; }
+.picker > button .chevron { width: 13px; height: 13px; transition: transform 160ms ease; }
+.picker > button[aria-expanded="true"] .chevron { transform: rotate(180deg); }
+.menu { position: absolute; top: calc(100% + 6px); right: 0; z-index: 5; width: max-content; min-width: 100%; padding: 5px; border: 1px solid #e5ded9; border-radius: 12px; background: rgb(255 253 250 / 98%); box-shadow: 0 12px 30px rgb(71 51 44 / 13%); }
+.menu button { display: grid; width: 100%; height: 30px; padding: 0 8px; grid-template-columns: minmax(90px, 1fr) 14px; align-items: center; gap: 10px; border: 0; border-radius: 8px; color: #625652; background: transparent; font-size: 11px; text-align: left; cursor: pointer; }
+.menu button:hover, .menu button[aria-selected="true"] { color: #754d49; background: #f6e7e2; }
+.menu svg { width: 13px; height: 13px; justify-self: end; }
