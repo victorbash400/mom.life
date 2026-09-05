@@ -33,3 +33,24 @@ class TaskCreate(BaseModel):
 
 class TaskUpdate(BaseModel):
     status: Literal["active", "paused", "completed"]
+
+
+class PluginPermissionUpdate(BaseModel):
+    permission_id: str = Field(min_length=1, max_length=160)
+    enabled: bool
+
+
+class GoalRevision(BaseModel):
+    instruction: str = Field(min_length=1,max_length=20000)
+
+
+class QuestionAnswer(BaseModel):
+    answer: str = Field(min_length=1,max_length=20000)
+    approved: bool = False
+
+
+class SkillWrite(BaseModel):
+    name: str = Field(min_length=1,max_length=120)
+    description: str = Field(min_length=1,max_length=1000)
+    instructions: str = Field(min_length=1,max_length=20000)
+    required_plugin_ids: list[str] = Field(default_factory=list)

@@ -14,7 +14,7 @@ async def stream_agent_events(*, family_id: str, chat_id: str, message: str) -> 
     lock = _session_locks.setdefault(session_id, asyncio.Lock())
     async with lock:
         tool_events = ToolEventRecorder()
-        agent = create_mom_life_agent(session_id, tool_events)
+        agent = create_mom_life_agent(session_id, tool_events, family_id=family_id)
         try:
             async for event in agent.stream_async(message):
                 for completed in tool_events.drain():

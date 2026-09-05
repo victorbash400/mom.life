@@ -48,13 +48,15 @@ def test_chat_stream_returns_sse(monkeypatch) -> None:
 def test_tasks_are_persisted_and_mutable(tmp_path, monkeypatch) -> None:
     from app.task_store import TaskStore
 
+    from unittest.mock import AsyncMock
     monkeypatch.setattr(main, "task_store", TaskStore(tmp_path / "tasks.sqlite3"))
+    monkeypatch.setattr(main, "goal_tasks", AsyncMock())
     created = client.post("/api/tasks", json={"family_id": "family-1", "child_id": "child-1", "text": "Book appointment"})
     assert created.status_code == 201
     task = created.json()
     assert task["status"] == "active"
     assert client.get("/api/tasks?family_id=family-1").json() == [task]
-    paused = client.patch(f"/api/tasks/{task['id']}", json={"status": "paused"})
+    paused = client.patch(f"/api/tasks/{task['id']}?family_id=family-1", json={"status": "paused"})
     assert paused.json()["status"] == "paused"
-    assert client.delete(f"/api/tasks/{task['id']}").status_code == 204
+    assert client.delete(f"/api/tasks/{task['id']}?family_id=family-1").status_code == 204
     assert client.get("/api/tasks?family_id=family-1").json() == []

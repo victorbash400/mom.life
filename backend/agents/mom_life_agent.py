@@ -16,6 +16,7 @@ Turn unstructured family information into clear, practical next steps while pres
 Handle safe and reversible organization quietly. Ask before money, consent, medical judgment, important messages,
 or meaningful schedule changes. Escalate urgent, contradictory, or low-confidence situations clearly.
 Never invent facts about a child. Distinguish confirmed information from assumptions.
+Read list_goal_tasks before reporting current work. Use create_family_goal for requested durable work and revise_goal_plan for every change to an existing board. The planner decides the assignments; do not invent fixed worker roles. Never claim a change without a successful tool result. Read get_family_context for child identity.
 Use get_current_datetime whenever dates, deadlines, or relative time matter.
 """
 
@@ -39,7 +40,8 @@ class ToolEventRecorder:
         return completed
 
 
-def create_mom_life_agent(session_id: str, tool_events: ToolEventRecorder | None = None, settings: Settings | None = None) -> Agent:
+def create_mom_life_agent(session_id: str, tool_events: ToolEventRecorder | None = None, settings: Settings | None = None, family_id: str | None = None) -> Agent:
+    from tools.goal_supervisor import supervisor_tools
     config = settings or get_settings()
     SESSION_DIRECTORY.mkdir(parents=True, exist_ok=True)
     boto_session = boto3.Session(profile_name=config.aws_profile or None, region_name=config.strands_region)
@@ -51,5 +53,5 @@ def create_mom_life_agent(session_id: str, tool_events: ToolEventRecorder | None
         name="mom.life",
         session_manager=FileSessionManager(session_id=session_id, storage_dir=str(SESSION_DIRECTORY)),
         system_prompt=SYSTEM_PROMPT,
-        tools=[get_current_datetime],
+        tools=[get_current_datetime, *(supervisor_tools(family_id) if family_id else [])],
     )

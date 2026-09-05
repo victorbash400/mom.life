@@ -5,3 +5,6 @@ boto3
 pydantic-settings
 httpx
 pytest
+bedrock-agentcore
+playwright
+cryptography
