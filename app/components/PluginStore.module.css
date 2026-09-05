@@ -14,3 +14,7 @@
 .directory > section + section { margin-top: 25px; }
 @keyframes store-in { from { opacity: 0; transform: translateY(12px) scale(.992); } to { opacity: 1; transform: none; } }
 @media (max-width: 680px) { .store { top: 22px; right: 8px; bottom: 20px; left: 20px; }.store > header,.search,.connected { margin-right: 12px; }.directory { padding-right: 12px; }.directory > section { width: 100%; } }
+
+.tabs { display: flex; justify-content: center; gap: 8px; margin-bottom: 12px; }
+.tabs button { padding: 6px 10px; border: 0; border-radius: 8px; background: transparent; color: #8c7b75; font-size: 11px; cursor: pointer; }
+.tabs button[aria-pressed="true"] { background: #eee6e1; color: #5f4740; }

@@ -1,0 +1,10 @@
+"use client";
+import { useEffect, useRef, useState } from "react";
+import type { FamilySkill } from "../types/goals";
+import { toolDirectory } from "../data/toolDirectory";
+import styles from "./SkillEditor.module.css";
+export function SkillEditor({ skill, onClose, onSaved }: { skill: FamilySkill | null; onClose: () => void; onSaved: (skill: FamilySkill) => void }) {
+  const ref = useRef<HTMLDialogElement>(null); const [error, setError] = useState<string>(); const [busy, setBusy] = useState(false);
+  useEffect(() => { ref.current?.showModal(); }, []);
+  return <dialog className={styles.dialog} ref={ref} onCancel={onClose}><form onSubmit={async (event) => { event.preventDefault(); const data = new FormData(event.currentTarget); setBusy(true); try { const response = await fetch(skill ? `/api/skills/${skill.id}` : "/api/skills", { method: skill ? "PATCH" : "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ name: data.get("name"), description: data.get("description"), instructions: data.get("instructions"), required_plugin_ids: data.getAll("plugins") }) }); const payload = await response.json(); if (!response.ok) throw new Error(payload.error); onSaved(payload); } catch (cause) { setError(cause instanceof Error ? cause.message : "Could not save skill."); } finally { setBusy(false); } }}><h2>{skill ? "Edit skill" : "New skill"}</h2><label>Name<input name="name" defaultValue={skill?.name} required /></label><label>Description<input name="description" defaultValue={skill?.description} required /></label><label>Instructions<textarea name="instructions" defaultValue={skill?.instructions} required /></label><fieldset><legend>Required connections</legend>{toolDirectory.map((tool) => <label key={tool.id}><input name="plugins" type="checkbox" value={tool.id} defaultChecked={skill?.required_plugin_ids.includes(tool.id)} />{tool.name}</label>)}</fieldset>{error ? <p role="alert">{error}</p> : null}<footer><button type="button" onClick={onClose}>Cancel</button><button disabled={busy} type="submit">Save skill</button></footer></form></dialog>;
+}

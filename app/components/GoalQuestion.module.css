@@ -1,0 +1,6 @@
+.question { display: grid; gap: 8px; margin: 12px 0; color: #66534d; font-size: 11px; }
+.question p { margin: 0; line-height: 1.5; }
+.question textarea { width: 100%; min-height: 60px; padding: 9px; resize: vertical; border: 1px solid #ded5d0; border-radius: 8px; background: #fffcfa; color: inherit; font: inherit; }
+.question pre { max-height: 170px; overflow: auto; margin: 0; white-space: pre-wrap; overflow-wrap: anywhere; font-size: 10px; }
+.question div { display: flex; flex-wrap: wrap; gap: 6px; }
+.question button { padding: 7px 10px; border: 0; border-radius: 7px; background: #eee5df; color: #654c43; font: inherit; cursor: pointer; }

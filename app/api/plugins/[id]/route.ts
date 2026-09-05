@@ -1,0 +1,4 @@
+const backendUrl = process.env.MOM_LIFE_BACKEND_URL ?? "http://127.0.0.1:8000";
+export async function POST(_request: Request, context: RouteContext<"/api/plugins/[id]">) { const { id } = await context.params; return forward(id, "POST"); }
+export async function DELETE(_request: Request, context: RouteContext<"/api/plugins/[id]">) { const { id } = await context.params; return forward(id, "DELETE"); }
+async function forward(id: string, method: "POST" | "DELETE") { try { const response = await fetch(`${backendUrl}/api/plugins/${encodeURIComponent(id)}?family_id=sarah-family`, { method }); return new Response(response.body, { status: response.status, headers: { "Content-Type": response.headers.get("Content-Type") ?? "application/json" } }); } catch { return Response.json({ error: "The mom.life backend is unavailable." }, { status: 503 }); } }

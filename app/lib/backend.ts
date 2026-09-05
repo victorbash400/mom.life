@@ -1,0 +1,12 @@
+const backendUrl = process.env.MOM_LIFE_BACKEND_URL ?? "http://127.0.0.1:8000";
+export async function backend(path: string, init: RequestInit = {}) {
+  try {
+    const response = await fetch(`${backendUrl}/api/${path}${path.includes("?") ? "&" : "?"}family_id=sarah-family`, { cache: "no-store", ...init });
+    if (!response.ok) {
+      const payload = await response.json().catch(() => ({}));
+      return Response.json({ error: typeof payload.detail === "string" ? payload.detail : "The request could not be completed." }, { status: response.status });
+    }
+    return new Response(response.body, { status: response.status, headers: { "Content-Type": response.headers.get("Content-Type") ?? "application/json", "Cache-Control": "no-cache", "X-Accel-Buffering": "no" } });
+  } catch { return Response.json({ error: "The mom.life backend is unavailable." }, { status: 503 }); }
+}
+export async function jsonRequest(request: Request, method = "POST"): Promise<RequestInit> { return { method, headers: { "Content-Type": "application/json" }, body: await request.text() }; }

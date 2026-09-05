@@ -1,0 +1,4 @@
+.assignment { margin: 0 0 8px; color: #645a55; font-size: 11px; line-height: 1.55; }
+.assignment summary { display: flex; justify-content: space-between; gap: 12px; cursor: pointer; }
+.assignment summary small { color: #91857e; white-space: nowrap; }
+.assignment p { margin: 7px 0; white-space: pre-wrap; overflow-wrap: anywhere; }

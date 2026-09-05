@@ -1,0 +1,7 @@
+.library { width: min(520px, 88%); margin: 4px auto 20px; overflow: auto; color: #66554d; }
+.library header { display: flex; justify-content: space-between; align-items: center; font-size: 12px; }
+.library button { border: 0; background: transparent; color: inherit; cursor: pointer; font-size: 11px; }
+.skill { display: block; width: 100%; padding: 12px 0; text-align: left; }
+.skill strong, .skill small { display: block; }
+.skill strong { font-size: 12px; font-weight: 550; }
+.skill small { margin-top: 5px; color: #96857c; line-height: 1.5; }

@@ -1,0 +1,10 @@
+.dialog { width: min(450px, 90vw); max-height: 85vh; padding: 22px; border: 0; border-radius: 19px; background: #fbfbfa; color: #64534a; box-shadow: 0 22px 70px rgb(78 51 43 / 24%); }
+.dialog::backdrop { background: rgb(70 47 40 / 15%); backdrop-filter: blur(2px); }
+.dialog h2 { margin: 0 0 16px; font-size: 15px; }
+.dialog label { display: grid; gap: 6px; margin: 10px 0; font-size: 11px; }
+.dialog input:not([type="checkbox"]), .dialog textarea { width: 100%; padding: 8px; border: 1px solid #ded5d0; border-radius: 7px; color: inherit; background: #fffcfa; font: inherit; }
+.dialog textarea { min-height: 100px; resize: vertical; }
+.dialog fieldset { margin: 14px 0; padding: 0; border: 0; font-size: 11px; }
+.dialog fieldset label { display: flex; align-items: center; }
+.dialog footer { display: flex; justify-content: flex-end; gap: 7px; }
+.dialog button { padding: 8px 12px; border: 0; border-radius: 8px; background: #ece4df; color: inherit; font-size: 11px; cursor: pointer; }
