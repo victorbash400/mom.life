@@ -11,3 +11,6 @@ backend/**/__pycache__/
 *.tsbuildinfo
 .venv/
 backend/.venv/
+
+!docs/goal-system.md
+!docs/family-plugins.md
