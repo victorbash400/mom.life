@@ -210,6 +210,13 @@ class TaskStore(GoalLedger):
         goal["plugin_ids"] = json.loads(goal["plugin_ids"] or "[]")
         assignments = connection.execute("SELECT * FROM goal_assignments WHERE goal_id=? ORDER BY created_at", (row["id"],)).fetchall()
         goal["assignments"] = [self._assignment_snapshot(item) for item in assignments]
+        skills = {skill["id"]: skill for skill in self.skills(str(row["family_id"]))}
+        from plugins.namespaces import namespaces
+        for assignment in goal["assignments"]:
+            assignment["skills"] = [skills[identity] for identity in assignment["skill_ids"] if identity in skills]
+            assignment["permitted_namespaces"] = namespaces(list(dict.fromkeys(
+                identity for skill in assignment["skills"] for identity in skill["required_plugin_ids"]
+            )))
         goal["questions"] = self.questions(str(row["id"]))
         goal["activities"] = [{**dict(item), "evidence": json.loads(item["evidence"])} for item in connection.execute("SELECT * FROM goal_activities WHERE goal_id=? ORDER BY created_at", (row["id"],))]
         return goal

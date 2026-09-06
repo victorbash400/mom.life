@@ -63,3 +63,18 @@ def test_goal_to_approval_to_verified_result(tmp_path,monkeypatch):
         assert any(event['kind']=='tool_result' for event in final['activities'])
         assert final['assignments'][0]['evidence']['outputs'][0]['name']=='Saved draft'
     asyncio.run(run())
+
+
+def test_board_scope_resolves_only_own_family_skills(tmp_path):
+    store = TaskStore(tmp_path / 'scope.db')
+    goal = store.create('family', 'child', 'Prepare draft')
+    skill = SimpleNamespace(name='Mail', description='Draft mail', instructions='Prepare a draft.', required_plugin_ids=['google-workspace'])
+    identity = store.save_skill('family', skill)
+    other = store.save_skill('other-family', skill)
+    store.create_assignment(goal['id'], {'title': 'Draft', 'instruction': 'Prepare it', 'skill_ids': [identity]})
+    board = store.get('family', goal['id'])
+    assignment = board['assignments'][0]
+    assert [item['id'] for item in assignment['skills']] == [identity]
+    assert other not in str(assignment)
+    assert 'workspace.gmail' in assignment['permitted_namespaces']
+    assert store.get('other-family', goal['id']) is None
