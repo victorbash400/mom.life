@@ -1,0 +1,3 @@
+.board { display: grid; gap: 8px; margin: 0 0 16px; padding-left: 18px; color: #91857e; font-size: 11px; line-height: 1.55; }
+.board li { white-space: pre-wrap; overflow-wrap: anywhere; }
+.board li[data-active] { color: #645a55; font-weight: 600; }
