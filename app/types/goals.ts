@@ -3,4 +3,4 @@ export type GoalQuestion = { id: string; question: string; context: string; stat
 export type FamilyTask = { id: string; family_id: string; child_id: string; text: string; status: "active" | "paused" | "completed"; run_state: string; current_step: string; progress: number; report: string; created_at: string; updated_at: string; activities: GoalActivity[]; assignments: Assignment[]; questions: GoalQuestion[] };
 export type FamilySkill = { id: string; name: string; description: string; instructions: string; required_plugin_ids: string[]; version: number };
 
-export type GoalActivity = { id: string; kind: string; summary: string; created_at: string; evidence: { assignment_id?: string } };
+export type GoalActivity = { id: string; kind: string; summary: string; created_at: string; evidence: { assignment_id?: string; call_id?: string; action?: { plugin_id: string; name: string } } };

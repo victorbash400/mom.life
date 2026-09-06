@@ -29,3 +29,11 @@ pnpm build
 ```
 
 Tests use temporary databases, fake model boundaries and HTTP mock transports. They exercise planning transactions, dependency handling, retry identity, family ownership, recovery, approvals, runtime failures and bounded API requests. They do not claim a live Bedrock completion, OAuth connection, provider operation, or cloud deployment. See `family-plugins.md` for the verified provider contracts and credential/onboarding requirements.
+
+## Task board parity pass
+
+The expandable mom.life task row now includes Front Desk's ordered assignment/milestone board. Worker updates come from the persisted activity ledger, are grouped by assignment, and repeated milestone text is shown once. Only an active running assignment marks its latest line active. Assignment details expose the operational instruction, currently selected skill procedures, permitted namespaces, and expected outputs. These displayed skills describe the current configuration, not an immutable historical skill-version snapshot.
+
+Tool starts, results, and errors publish immediate family-scoped SSE invalidations. Each assignment displays its tool call status, including an explicit missing-result state for interrupted calls. Worker progress accepts planning, working, and checking phases; only verified completion can set completion. Progress tools execute asynchronously on the runtime event loop. Tests exercise the actual worker tool wrappers through an approval/resume cycle, persisted milestone retrieval, and family event isolation.
+
+Browser implementation and live provider onboarding were outside this parity pass. The UI changes use mom.life's existing task-row spacing and colors rather than Front Desk's visual theme.

@@ -4,6 +4,7 @@ from types import SimpleNamespace
 
 from agents.goal_planner import AssignmentPlan, GoalPlan
 from app.goal_tasks import GoalTaskManager
+from app.event_stream import family_events
 from app.task_store import TaskStore
 
 
@@ -22,6 +23,7 @@ def test_goal_to_approval_to_verified_result(tmp_path,monkeypatch):
     class Plugins:
         def __init__(self,*args):
             self.loaded={}
+            self.family_id='family'
         async def load(self,identity):
             self.loaded[identity]=[{'name':'create_draft','requires_approval':True}]
             return self.loaded[identity]
@@ -35,6 +37,8 @@ def test_goal_to_approval_to_verified_result(tmp_path,monkeypatch):
         def __init__(self,**kwargs):
             self.tools={item.tool_name:item for item in kwargs['tools']}
         async def stream_async(self,prompt):
+            await self.tools['update_progress']('Checked the school-trip request', 30, 'Prepare the draft', 'checking')
+            yield {}
             await self.tools['load_goal_tools'](['microsoft-family'])
             yield {}
             result=await self.tools['call_plugin']('microsoft-family','create_draft',{'subject':'School trip','body':'Please review supplies.'})
@@ -45,11 +49,16 @@ def test_goal_to_approval_to_verified_result(tmp_path,monkeypatch):
     monkeypatch.setattr(goal_worker,'Agent',Agent)
     monkeypatch.setattr(goal_worker,'BedrockModel',lambda **kwargs:None)
     async def run():
+        queue = family_events.subscribe('family')
+        other_queue = family_events.subscribe('other-family')
         manager=GoalTaskManager(store)
         await manager._orchestrate('family',goal['id'])
         blocked=store.get('family',goal['id'])
         assert blocked['run_state']=='blocked'
         assert calls==[]
+        updates = [item for item in blocked['activities'] if item['kind'] == 'worker_update']
+        assert updates[0]['summary'] == 'Checked the school-trip request'
+        assert updates[0]['evidence']['assignment_id'] == blocked['assignments'][0]['id']
         question=blocked['questions'][0]
         assert question['action']['arguments']['subject']=='School trip'
         assignment_id=blocked['assignments'][0]['id']
@@ -62,6 +71,11 @@ def test_goal_to_approval_to_verified_result(tmp_path,monkeypatch):
         assert final['questions'][0]['state']=='consumed'
         assert any(event['kind']=='tool_result' for event in final['activities'])
         assert final['assignments'][0]['evidence']['outputs'][0]['name']=='Saved draft'
+        assert not queue.empty()
+        assert other_queue.empty()
+        assert TaskStore(store.path).get('family', goal['id'])['activities'] == final['activities']
+        family_events.unsubscribe('family', queue)
+        family_events.unsubscribe('other-family', other_queue)
     asyncio.run(run())
 
 

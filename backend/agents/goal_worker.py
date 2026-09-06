@@ -1,6 +1,8 @@
 import json
 from collections.abc import Callable
 from uuid import uuid4
+from typing import Literal
+from app.event_stream import family_events
 
 import boto3
 from strands import Agent, tool
@@ -37,8 +39,11 @@ async def run_worker(prompt, plugins, on_progress: Callable, expected_outputs, s
     result = {}
 
     @tool
-    def update_progress(message: str, progress: int, next_step: str = '') -> dict:
+    async def update_progress(message: str, progress: int, next_step: str = '', phase: Literal['planning', 'working', 'checking'] = 'working') -> dict:
         """Persist an observed milestone and the concrete next action."""
+        if not message.strip():
+            raise ValueError('Describe an observed milestone.')
+        store.set_assignment(assignment_id, phase=phase)
         on_progress(message.strip(), max(0,min(95,progress)), next_step.strip())
         return {'status':'recorded'}
 
@@ -81,12 +86,15 @@ async def run_worker(prompt, plugins, on_progress: Callable, expected_outputs, s
             return {'status':'waiting_for_mom','instruction':'End this run now.'}
         call_id = str(uuid4())
         store.add_activity(goal_id,'tool_started',name,{'assignment_id':assignment_id,'call_id':call_id,'action':action})
+        family_events.publish(plugins.family_id, {'type': 'goals_changed', 'goal_id': goal_id})
         try:
             response = await plugins.call(plugin_id,name,arguments,call_id)
         except Exception as error:
             store.add_activity(goal_id,'tool_failed',str(error),{'assignment_id':assignment_id,'call_id':call_id})
+            family_events.publish(plugins.family_id, {'type': 'goals_changed', 'goal_id': goal_id})
             raise
         store.add_activity(goal_id,'tool_result',name,{'assignment_id':assignment_id,'call_id':call_id,'result':response})
+        family_events.publish(plugins.family_id, {'type': 'goals_changed', 'goal_id': goal_id})
         return response
 
     @tool

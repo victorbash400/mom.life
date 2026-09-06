@@ -1,0 +1,4 @@
+.activity { list-style: none; padding: 0; margin: 10px 0; }
+.activity li { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 4px 12px; margin: 6px 0; overflow-wrap: anywhere; }
+.activity small { color: #91857e; }
+.activity p { flex-basis: 100%; }
