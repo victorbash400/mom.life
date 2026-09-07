@@ -1,0 +1,7 @@
+.actions { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; padding: 10px 5px; font-size: 12px; color: #654e47; }
+.actions button,.actions label,.actions a { border: 1px solid #cbb6af; border-radius: 16px; background: #f3e9e4; color: #654e47; padding: 7px 13px; cursor: pointer; text-decoration: none; }
+.actions label { position: relative; overflow: hidden; }
+.actions label input { position: absolute; inset: 0; opacity: 0; width: 100%; cursor: pointer; }
+.actions form { display: flex; gap: 8px; }
+.actions form input { border: 1px solid #cbb6af; border-radius: 10px; padding: 7px; background: #fff9f2; }
+.actions p { flex-basis: 100%; margin: 0; color: #9e4f49; }

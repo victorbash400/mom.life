@@ -1,7 +1,7 @@
 "use client";
 
-import { useMemo, useState } from "react";
-import { profileData } from "../data/childData";
+import { useEffect, useState, useCallback } from "react";
+import { FolderActions } from "./FolderActions";
 import type { PersonProfile } from "../types/dashboard";
 import type { ChildDataNode, ChildDataSort, ChildDataView } from "../types/childData";
 import { ChildDataColumns } from "./ChildDataColumns";
@@ -11,8 +11,19 @@ import { ChildDataToolbar } from "./ChildDataToolbar";
 import styles from "./ChildInformationWorkspace.module.css";
 
 export function ChildInformationWorkspace({ profile, child = false, onBack }: { profile: PersonProfile; child?: boolean; onBack: () => void }) {
-  const nodes = useMemo(() => profileData(profile, child), [child, profile]);
+  const ownerId = child ? profile.id : "parent";
   const [folderId, setFolderId] = useState<string>();
+  const [nodes, setNodes] = useState<ChildDataNode[]>([]);
+  const [error, setError] = useState("");
+  const refresh = useCallback(async () => {
+    const response = await fetch(`/api/family/children/${ownerId}/nodes`, { cache: "no-store" });
+    if (!response.ok) throw new Error("Could not load files.");
+    const next: ChildDataNode[] = await response.json();
+    setNodes(next);
+    setFolderId((current) => next.some((node) => node.id === current) ? current : undefined);
+    setError("");
+  }, [ownerId]);
+  useEffect(() => { const frame = requestAnimationFrame(() => { void refresh().catch((cause) => setError(cause.message)); }); return () => cancelAnimationFrame(frame); }, [refresh]);
   const [selectedId, setSelectedId] = useState<string>();
   const [view, setView] = useState<ChildDataView>("grid");
   const [sort, setSort] = useState<ChildDataSort>("name-asc");
@@ -21,12 +32,12 @@ export function ChildInformationWorkspace({ profile, child = false, onBack }: { 
   const selected = nodes.find((node) => node.id === selectedId);
   const visible = nodes
     .filter((node) => node.parentId === (folderId ?? null) && (!query || node.name.toLowerCase().includes(query.toLowerCase())))
-    .sort((left, right) => sort === "name-desc" ? right.name.localeCompare(left.name) : left.name.localeCompare(right.name));
+    .sort((left, right) => sort.startsWith("date") ? (new Date(left.updatedAt).getTime() - new Date(right.updatedAt).getTime()) * (sort === "date-desc" ? -1 : 1) : sort === "name-desc" ? right.name.localeCompare(left.name) : left.name.localeCompare(right.name));
 
   function open(node: ChildDataNode) {
     if (node.kind === "folder") {
       setFolderId(node.id);
-      setSelectedId(undefined);
+      setSelectedId(node.id);
     } else {
       setSelectedId(node.id);
     }
@@ -34,7 +45,7 @@ export function ChildInformationWorkspace({ profile, child = false, onBack }: { 
 
   function back() {
     if (folderId) {
-      setFolderId(undefined);
+      setFolderId(folder?.parentId ?? undefined);
       setSelectedId(undefined);
     } else {
       onBack();
@@ -51,5 +62,5 @@ export function ChildInformationWorkspace({ profile, child = false, onBack }: { 
     setSelectedId(undefined);
   }
 
-  return <section className={styles.information}><ChildDataToolbar canGoBack childName={profile.name} folderName={folder?.name} onBack={back} onQueryChange={setQuery} onRoot={root} onSortChange={setSort} onViewChange={changeView} query={query} sort={sort} view={view} /><section className={styles.content}>{view === "grid" ? <ChildDataGrid nodes={visible} onOpen={open} /> : null}{view === "list" ? <ChildDataList nodes={visible} onOpen={open} selectedId={selectedId} /> : null}{view === "columns" ? <ChildDataColumns nodes={nodes} onSelect={(node) => setSelectedId(node.id)} selected={selected} /> : null}</section></section>;
+  return <section className={styles.information}><ChildDataToolbar canGoBack childName={profile.name} folderName={folder?.name} onBack={back} onQueryChange={setQuery} onRoot={root} onSortChange={setSort} onViewChange={changeView} query={query} sort={sort} view={view} /><section className={styles.content}><FolderActions childId={ownerId} parentId={folderId} selected={selected} onSaved={async () => { await refresh(); setSelectedId(undefined); }} />{error ? <p role="alert">{error}</p> : null}{view === "grid" ? <ChildDataGrid nodes={visible} onOpen={open} /> : null}{view === "list" ? <ChildDataList nodes={visible} onOpen={open} selectedId={selectedId} /> : null}{view === "columns" ? <ChildDataColumns nodes={nodes} onSelect={open} selected={selected} /> : null}</section></section>;
 }

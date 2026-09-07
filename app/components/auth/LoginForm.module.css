@@ -1,0 +1,12 @@
+.form { display: grid; gap: 12px; }
+.form label { display: grid; gap: 7px; font-size: 13px; color: #756057; }
+.form input { width: 100%; height: 40px; border: 1px solid #dac6ba; border-radius: 16px; background: rgb(255 252 247 / 70%); padding: 0 15px; color: #51413a; outline: none; }
+.form input:focus { border-color: #b97771; box-shadow: 0 0 0 3px rgb(185 119 113 / 10%); }
+.feedback { min-height: 22px; display: grid; align-items: center; }
+.feedback button { background: none; border: none; padding: 0; width: fit-content; font-size: 13px; color: #a5625c; cursor: pointer; }
+.feedback p { font-size: 11px; line-height: 1.4; margin: 0; color: #9e4f49; }
+.submit { height: 46px; border: 1px solid #a76660; border-radius: 999px; color: #fffaf4; background: #bd7771; box-shadow: inset 0 1px rgb(255 255 255 / 26%), 0 7px 18px rgb(112 68 64 / 10%); cursor: pointer; }
+.submit:hover { background: #ad6863; }
+.form button:disabled { opacity: .65; cursor: wait; }
+.form button:focus-visible { outline: 2px solid #a5625c; outline-offset: 4px; }
+.form input:autofill { box-shadow: inset 0 0 0 100px #fff9f2; -webkit-text-fill-color: #51413a; }

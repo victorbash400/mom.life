@@ -1,0 +1,20 @@
+.sidebar { min-width: 0; min-height: 0; overflow: hidden; background: #f3e6de; color: #594840; }
+.content { box-sizing: border-box; display: grid; width: 232px; height: 100%; min-height: 0; grid-template-rows: 30px 34px 34px minmax(0, 1fr); gap: 10px; padding: 16px; border-right: 1px solid rgb(185 119 113 / 16%); }
+.sidebar header, .sidebar button, .search { display: flex; align-items: center; gap: 8px; }
+.sidebar header { justify-content: space-between; padding-left: 8px; font-size: 13px; }
+.sidebar button { border: 0; color: inherit; background: transparent; cursor: pointer; font: inherit; }
+.sidebar svg { width: 16px; height: 16px; flex-shrink: 0; }
+.sidebar header button { padding: 6px; }
+.sidebar .create { padding: 10px 12px; border-radius: 12px; color: white; background: #b8756f; font-size: 12px; }
+.search { padding: 9px 10px; border-radius: 10px; background: #fff9f4; color: #907a70; }
+.search input { width: 100%; min-width: 0; border: 0; background: transparent; color: #594840; font: inherit; font-size: 12px; }
+.sidebar nav { min-height: 0; overflow-y: auto; scrollbar-width: thin; }
+.sidebar nav p { padding: 8px; color: #907a70; font-size: 12px; }
+.row { display: flex; align-items: center; border-radius: 10px; margin-bottom: 4px; }
+.row[data-active="true"], .row:hover { background: #ead7cc; }
+.row > button:first-child { display: block; flex: 1; min-width: 0; padding: 11px 8px; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; text-align: left; font-size: 12px; }
+.row > button:last-child { padding: 7px; opacity: .6; }
+.sidebar button:disabled { opacity: .45; cursor: default; }
+.sidebar button:focus-visible, .search:focus-within { outline: 2px solid #a76761; outline-offset: 2px; }
+
+@media (max-width: 680px) { .content { width: 100%; height: 190px; grid-template-columns: 1fr 1fr; grid-template-rows: 30px 34px minmax(0, 1fr); gap: 8px; padding: 12px; border-right: 0; border-bottom: 1px solid rgb(185 119 113 / 16%); } .sidebar header, .sidebar nav { grid-column: 1 / -1; } }

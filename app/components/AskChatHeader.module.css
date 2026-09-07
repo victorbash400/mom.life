@@ -1,0 +1,5 @@
+.header { display: flex; height: 30px; flex-shrink: 0; align-items: center; gap: 8px; }
+.header button { display: grid; width: 26px; height: 26px; flex-shrink: 0; padding: 0; place-items: center; border: 0; border-radius: 7px; background: transparent; color: #80675d; cursor: pointer; }
+.header button:hover { background: #f5e9e2; color: #594840; }
+.header svg { width: 15px; height: 15px; stroke-width: 1.7; }
+.header strong { min-width: 0; overflow: hidden; color: #594840; font-size: 12px; font-weight: 650; text-overflow: ellipsis; white-space: nowrap; }

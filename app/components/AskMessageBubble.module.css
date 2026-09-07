@@ -6,4 +6,7 @@
 .message[data-role="assistant"] > :last-child { margin-bottom: 0; }
 .message h1, .message h2, .message h3 { font-family: var(--font-display), Georgia, serif; font-weight: 500; }
 .message code { padding: 2px 4px; border-radius: 4px; background: #f2e4de; }
-.thinking { color: #a07870; font-size: 12px; }
+.thinking { position: relative; display: inline-block; overflow: hidden; color: #a07870; font-size: 12px; }
+.thinking::after { position: absolute; inset: 0 auto 0 -55%; width: 48%; background: linear-gradient(100deg, transparent, rgb(255 255 255 / 98%), transparent); content: ""; animation: thinking-shimmer 1.25s ease-in-out infinite; }
+@keyframes thinking-shimmer { to { transform: translateX(330%); } }
+@media (prefers-reduced-motion: reduce) { .thinking::after { display: none; } }

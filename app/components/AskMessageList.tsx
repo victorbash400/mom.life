@@ -1,7 +1,11 @@
-import type { AskMessage } from "./AskWorkspace";
+import { useEffect, useRef } from "react";
+import type { AskMessage } from "../types/chat";
 import { AskMessageBubble } from "./AskMessageBubble";
 import styles from "./AskMessageList.module.css";
 
 export function AskMessageList({ messages, sending }: { messages: AskMessage[]; sending: boolean }) {
-  return <section className={styles.list} aria-live="polite"><div>{messages.map((message) => <AskMessageBubble key={message.id} message={message} pending={sending && message === messages.at(-1) && !message.content} />)}</div></section>;
+  const list = useRef<HTMLElement>(null);
+  const follow = useRef(true);
+  useEffect(() => { if (follow.current && list.current) list.current.scrollTop = list.current.scrollHeight; }, [messages]);
+  return <section ref={list} onScroll={() => { const node = list.current; if (node) follow.current = node.scrollHeight - node.scrollTop - node.clientHeight < 80; }} className={styles.list} aria-live="polite"><div>{messages.map((message) => <AskMessageBubble key={message.id} message={message} pending={sending && message === messages.at(-1) && !message.content} />)}</div></section>;
 }

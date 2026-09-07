@@ -1,6 +1,6 @@
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
-import type { AskMessage } from "./AskWorkspace";
+import type { AskMessage } from "../types/chat";
 import styles from "./AskMessageBubble.module.css";
 
 export function AskMessageBubble({ message, pending }: { message: AskMessage; pending: boolean }) {
