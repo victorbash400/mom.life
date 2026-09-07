@@ -1,3 +1,4 @@
+from app.database import table_exists
 import json
 from uuid import uuid4
 
@@ -43,7 +44,7 @@ class GoalLedger:
                 if row['status'] == 'completed':
                     raise ValueError('Completed evidence cannot be rewritten or cancelled.')
                 db.execute("UPDATE goal_questions SET state='superseded' WHERE assignment_id=? AND state IN ('open','approved')", (op.task_id,))
-                if db.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='provider_waits'").fetchone():
+                if table_exists(db, "provider_waits"):
                     db.execute("UPDATE provider_waits SET state='superseded' WHERE assignment_id=? AND state='waiting'", (op.task_id,))
                 if action == 'cancel':
                     db.execute("UPDATE goal_assignments SET status='cancelled',phase='cancelled',finished_at=? WHERE id=?", (now(),op.task_id))
@@ -139,4 +140,4 @@ class GoalLedger:
 
     def save_family_context(self, family_id, payload):
         with self._connect() as db:
-            db.execute('INSERT OR REPLACE INTO family_context VALUES (?,?)',(family_id,json.dumps(payload)))
+            db.execute('INSERT INTO family_context VALUES (?,?) ON CONFLICT (family_id) DO UPDATE SET payload=excluded.payload',(family_id,json.dumps(payload)))

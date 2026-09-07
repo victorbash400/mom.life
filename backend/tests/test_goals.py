@@ -160,15 +160,15 @@ def test_blocked_answer_is_in_resumed_worker_context(board,monkeypatch):
     assert store.get('family',goal)['status']=='completed'
 
 
-def test_api_rejects_other_family_and_manual_completion(board,monkeypatch):
+def test_api_rejects_other_family_and_manual_completion(board,monkeypatch,auth_headers):
     from fastapi.testclient import TestClient
     from app import main
     store,goal = board
     monkeypatch.setattr(main,'task_store',store)
     monkeypatch.setattr(main,'goal_tasks',AsyncMock())
-    client = TestClient(main.app)
-    assert client.patch(f'/api/tasks/{goal}?family_id=other',json={'status':'paused'}).status_code==404
-    assert client.delete(f'/api/tasks/{goal}?family_id=other').status_code==404
+    client = TestClient(main.app, headers=auth_headers('family'))
+    assert client.patch(f'/api/tasks/{goal}?family_id=other',json={'status':'paused'}).status_code==403
+    assert client.delete(f'/api/tasks/{goal}?family_id=other').status_code==403
     assert client.patch(f'/api/tasks/{goal}?family_id=family',json={'status':'completed'}).status_code==409
 
 
@@ -245,14 +245,14 @@ def test_cancelled_dependency_requires_coherent_revision(board):
     assert store.assignment(second['id'])['depends_on']==[]
 
 
-def test_stale_answer_does_not_stop_active_work(board,monkeypatch):
+def test_stale_answer_does_not_stop_active_work(board,monkeypatch,auth_headers):
     from fastapi.testclient import TestClient
     from app import main
     store,goal=board
     manager=AsyncMock()
     monkeypatch.setattr(main,'task_store',store)
     monkeypatch.setattr(main,'goal_tasks',manager)
-    response=TestClient(main.app).post(f'/api/tasks/{goal}/questions/missing?family_id=family',json={'answer':'Yes','approved':True})
+    response=TestClient(main.app, headers=auth_headers('family')).post(f'/api/tasks/{goal}/questions/missing?family_id=family',json={'answer':'Yes','approved':True})
     assert response.status_code==400
     manager.stop.assert_not_awaited()
     assert store.get('family',goal)['status']=='active'

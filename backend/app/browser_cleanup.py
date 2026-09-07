@@ -1,3 +1,4 @@
+from app.database import table_exists
 import asyncio
 
 import boto3
@@ -7,7 +8,7 @@ from app.config import get_settings
 
 async def discard_goal_browser_sessions(store,goal_id):
     with store._connect() as db:
-        if not db.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='browser_sessions'").fetchone():
+        if not table_exists(db, "browser_sessions"):
             return
         rows=db.execute('SELECT b.* FROM browser_sessions b JOIN goal_assignments a ON a.id=b.assignment_id WHERE a.goal_id=?',(goal_id,)).fetchall()
     if not rows:

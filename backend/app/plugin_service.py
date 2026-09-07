@@ -34,7 +34,7 @@ class PluginService:
             elif plugin_id == 'agentcore-browser':
                 await session.clients[plugin_id].validate()
             with self.store._connect() as db:
-                db.execute('INSERT OR REPLACE INTO plugin_connections VALUES (?,?,?)',(family_id,plugin_id,now()))
+                db.execute('INSERT INTO plugin_connections VALUES (?,?,?) ON CONFLICT (family_id,plugin_id) DO UPDATE SET validated_at=excluded.validated_at',(family_id,plugin_id,now()))
             return {'tools':len(directory),'plugin':next(p for p in self.list(family_id) if p['id']==plugin_id)}
         finally:
             await session.close()

@@ -10,13 +10,15 @@ def now() -> str:
 
 
 from app.goal_ledger import GoalLedger
+from app.database import connect, table_exists
 
 
 class TaskStore(GoalLedger):
     """Durable family goals, assignment boards, skills, plugins, and evidence."""
 
     def __init__(self, path: Path) -> None:
-        self.path = path
+        self.database = path
+        self.path = path if isinstance(path, Path) else Path(__file__).resolve().parents[1] / "data" / "postgres"
         self.path.parent.mkdir(parents=True, exist_ok=True)
         with self._connect() as connection:
             connection.executescript("""
@@ -76,6 +78,8 @@ class TaskStore(GoalLedger):
             self._migrate_tasks(connection)
 
     def _migrate_tasks(self, connection: sqlite3.Connection) -> None:
+        if not isinstance(self.database, Path):
+            return
         columns = {row[1] for row in connection.execute("PRAGMA table_info(family_tasks)")}
         additions = {
             "run_state": "TEXT NOT NULL DEFAULT 'idle'", "current_step": "TEXT NOT NULL DEFAULT ''",
@@ -168,12 +172,12 @@ class TaskStore(GoalLedger):
 
     def install_plugin(self, family_id: str, plugin_id: str) -> None:
         with self._connect() as connection:
-            connection.execute("INSERT OR IGNORE INTO plugin_installations VALUES (?,?,?)", (family_id, plugin_id, now()))
+            connection.execute("INSERT INTO plugin_installations VALUES (?,?,?) ON CONFLICT DO NOTHING", (family_id, plugin_id, now()))
 
     def uninstall_plugin(self, family_id: str, plugin_id: str) -> None:
         with self._connect() as connection:
             connection.execute("DELETE FROM plugin_installations WHERE family_id=? AND plugin_id=?", (family_id, plugin_id))
-            if connection.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='oauth_tokens'").fetchone():
+            if table_exists(connection, "oauth_tokens"):
                 connection.execute("DELETE FROM oauth_tokens WHERE family_id=? AND plugin_id=?",(family_id,plugin_id))
                 connection.execute("DELETE FROM oauth_attempts WHERE family_id=? AND plugin_id=?",(family_id,plugin_id))
             connection.execute("DELETE FROM plugin_connections WHERE family_id=? AND plugin_id=?", (family_id, plugin_id))
@@ -185,7 +189,7 @@ class TaskStore(GoalLedger):
 
     def set_permission(self, family_id: str, plugin_id: str, permission_id: str, enabled: bool) -> None:
         with self._connect() as connection:
-            connection.execute("INSERT OR REPLACE INTO plugin_permissions VALUES (?,?,?,?)", (family_id, plugin_id, permission_id, int(enabled)))
+            connection.execute("INSERT INTO plugin_permissions VALUES (?,?,?,?) ON CONFLICT (family_id,plugin_id,permission_id) DO UPDATE SET enabled=excluded.enabled", (family_id, plugin_id, permission_id, int(enabled)))
 
     def permissions(self, family_id: str, plugin_id: str) -> dict[str, bool]:
         with self._connect() as connection:
@@ -194,9 +198,9 @@ class TaskStore(GoalLedger):
     def seed_skills(self, family_id: str, skills: tuple[dict[str, object], ...]) -> None:
         with self._connect() as connection:
             for skill in skills:
-                connection.execute("""INSERT OR IGNORE INTO family_skills
+                connection.execute("""INSERT INTO family_skills
                     (id,family_id,slug,name,description,instructions,required_plugin_ids,source,version,created_at)
-                    VALUES (?,?,?,?,?,?,?,?,?,?)""", (str(uuid4()), family_id, skill["slug"], skill["name"], skill["description"],
+                    VALUES (?,?,?,?,?,?,?,?,?,?) ON CONFLICT DO NOTHING""", (str(uuid4()), family_id, skill["slug"], skill["name"], skill["description"],
                     skill["instructions"], json.dumps(skill["required_plugin_ids"]), "builtin", 1, now()))
 
     def skills(self, family_id: str) -> list[dict[str, object]]:
@@ -210,14 +214,14 @@ class TaskStore(GoalLedger):
         goal["plugin_ids"] = json.loads(goal["plugin_ids"] or "[]")
         assignments = connection.execute("SELECT * FROM goal_assignments WHERE goal_id=? ORDER BY created_at", (row["id"],)).fetchall()
         goal["assignments"] = [self._assignment_snapshot(item) for item in assignments]
-        skills = {skill["id"]: skill for skill in self.skills(str(row["family_id"]))}
+        skills = {skill["id"]: {**dict(skill), "required_plugin_ids": json.loads(skill["required_plugin_ids"])} for skill in connection.execute("SELECT * FROM family_skills WHERE family_id=?", (row["family_id"],))}
         from plugins.namespaces import namespaces
         for assignment in goal["assignments"]:
             assignment["skills"] = [skills[identity] for identity in assignment["skill_ids"] if identity in skills]
             assignment["permitted_namespaces"] = namespaces(list(dict.fromkeys(
                 identity for skill in assignment["skills"] for identity in skill["required_plugin_ids"]
             )))
-        goal["questions"] = self.questions(str(row["id"]))
+        goal["questions"] = [{**dict(question), "action": json.loads(question["action"]) if question["action"] else None} for question in connection.execute("SELECT * FROM goal_questions WHERE goal_id=? ORDER BY created_at", (row["id"],))]
         goal["activities"] = [{**dict(item), "evidence": json.loads(item["evidence"])} for item in connection.execute("SELECT * FROM goal_activities WHERE goal_id=? ORDER BY created_at", (row["id"],))]
         return goal
 
@@ -228,8 +232,5 @@ class TaskStore(GoalLedger):
             item[field] = json.loads(item[field] or "[]")
         return item
 
-    def _connect(self) -> sqlite3.Connection:
-        connection = sqlite3.connect(self.path)
-        connection.row_factory = sqlite3.Row
-        connection.execute("PRAGMA foreign_keys=ON")
-        return connection
+    def _connect(self):
+        return connect(self.database)

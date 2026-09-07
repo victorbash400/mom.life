@@ -1,11 +1,19 @@
 from collections.abc import AsyncIterator
 
+import pytest
 from fastapi.testclient import TestClient
 
 from app import main
 
 
 client = TestClient(main.app)
+
+
+@pytest.fixture(autouse=True)
+def authenticated_client(auth_headers):
+    client.headers.update(auth_headers('family-1'))
+    yield
+    client.headers.pop('Authorization', None)
 
 
 def test_health() -> None:
@@ -29,15 +37,19 @@ def test_runtime_exposes_model_plan() -> None:
     assert payload["models"][2]["enabled"] is False
 
 
-def test_chat_stream_returns_sse(monkeypatch) -> None:
+def test_chat_stream_returns_sse(monkeypatch, tmp_path) -> None:
     async def fake_stream(**_: str) -> AsyncIterator[str]:
         yield 'data: {"type": "content", "content": "Ready"}\n\n'
         yield 'data: {"type": "done"}\n\n'
 
+    from app import chat_routes
+    from app.chat_store import ChatStore
+    monkeypatch.setattr(chat_routes, "chats", ChatStore(tmp_path / "chats.sqlite3"))
+    chat = client.post("/api/chats").json()
     monkeypatch.setattr(main, "stream_agent_events", fake_stream)
     response = client.post(
         "/api/chat/stream",
-        json={"family_id": "family-1", "chat_id": "chat-1", "message": "Hello"},
+        json={"family_id": "family-1", "chat_id": chat["id"], "message": "Hello"},
     )
     assert response.status_code == 200
     assert response.headers["content-type"].startswith("text/event-stream")
@@ -51,7 +63,7 @@ def test_tasks_are_persisted_and_mutable(tmp_path, monkeypatch) -> None:
     from unittest.mock import AsyncMock
     monkeypatch.setattr(main, "task_store", TaskStore(tmp_path / "tasks.sqlite3"))
     monkeypatch.setattr(main, "goal_tasks", AsyncMock())
-    created = client.post("/api/tasks", json={"family_id": "family-1", "child_id": "child-1", "text": "Book appointment"})
+    created = client.post("/api/tasks", json={"family_id": "family-1", "child_id": "all", "text": "Book appointment"})
     assert created.status_code == 201
     task = created.json()
     assert task["status"] == "active"

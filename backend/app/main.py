@@ -27,6 +27,13 @@ async def lifespan(app):
 
 
 app = FastAPI(title="mom.life API", version="0.1.0", lifespan=lifespan)
+from app.auth import router as auth_router, require_session
+app.include_router(auth_router)
+from app.family_routes import router as family_router
+app.include_router(family_router)
+from app.chat_routes import router as chat_router
+app.include_router(chat_router)
+app.middleware("http")(require_session)
 from app.goal_routes import router as goal_router
 app.include_router(goal_router)
 from app.whatsapp_webhook import router as webhook_router
@@ -34,7 +41,7 @@ app.include_router(webhook_router)
 from app.oauth_routes import router as oauth_router
 app.include_router(oauth_router)
 settings = get_settings()
-task_store = TaskStore(Path(__file__).resolve().parents[1] / "data" / "mom-life.sqlite3")
+task_store = TaskStore(settings.database_url)
 goal_tasks = GoalTaskManager(task_store)
 app.add_middleware(
     CORSMiddleware,
@@ -66,6 +73,9 @@ def runtime() -> RuntimeResponse:
 
 @app.post("/api/chat/stream")
 def chat_stream(body: ChatRequest) -> StreamingResponse:
+    from app.chat_routes import chats
+    if not chats.get(body.family_id, body.chat_id):
+        raise HTTPException(404, "Chat not found.")
     return StreamingResponse(
         stream_agent_events(family_id=body.family_id, chat_id=body.chat_id, message=body.message),
         media_type="text/event-stream",
@@ -80,6 +90,9 @@ def list_tasks(family_id: str) -> list[dict[str, object]]:
 
 @app.post("/api/tasks", status_code=201)
 async def create_task(body: TaskCreate) -> dict[str, object]:
+    from app.auth import families
+    if body.child_id != 'all' and not families.child(body.family_id,body.child_id):
+        raise HTTPException(404,"Child not found.")
     goal = task_store.create(body.family_id, body.child_id, body.text)
     await goal_tasks.start(body.family_id, str(goal["id"]))
     return goal
@@ -90,6 +103,10 @@ async def update_task(task_id: str, body: TaskUpdate, family_id: str) -> dict[st
     current = task_store.get(family_id,task_id)
     if not current:
         raise HTTPException(404,"Task not found")
+    if body.status == "active" and current['child_id'] != 'all':
+        from app.auth import families
+        if not families.child(family_id,current['child_id']):
+            raise HTTPException(409,"This child's profile has been removed.")
     if body.status == "completed":
         raise HTTPException(409,"Assignments must complete with evidence before the goal can finish.")
     if body.status == "paused":

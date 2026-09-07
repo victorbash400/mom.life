@@ -12,6 +12,9 @@ def supervisor_tools(family_id):
     @tool
     async def create_family_goal(child_id: str, request: str) -> dict:
         """Create a durable goal when Mom asks for work. Preserve the requested outcome."""
+        from app.auth import families
+        if child_id != 'all' and not families.child(family_id,child_id):
+            raise ValueError('Select an existing child or all children.')
         goal = task_store.create(family_id,child_id,request)
         await goal_tasks.start(family_id,goal['id'])
         return goal

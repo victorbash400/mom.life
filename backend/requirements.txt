@@ -8,3 +8,8 @@ pytest
 bedrock-agentcore
 playwright
 cryptography
+
+psycopg[binary,pool]
+argon2-cffi
+python-multipart
+Pillow

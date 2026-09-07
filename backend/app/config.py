@@ -9,6 +9,7 @@ PROJECT_ROOT = Path(__file__).resolve().parents[2]
 
 
 class Settings(BaseSettings):
+    database_url: str = ""
     strands_region: str = "us-east-1"
     strands_model_id: str = "moonshotai.kimi-k2.5"
     reasoning_model_id: str = "openai.gpt-5.6-luna"

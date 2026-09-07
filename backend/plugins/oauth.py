@@ -98,7 +98,7 @@ class OAuthConnections:
         with self.store._connect() as db:
             if not db.execute('SELECT plugin_id FROM plugin_installations WHERE family_id=? AND plugin_id=?',(row['family_id'],row['plugin_id'])).fetchone():
                 raise ValueError('The connection was removed during authorization.')
-            db.execute('INSERT OR REPLACE INTO oauth_tokens VALUES (?,?,?)',(row['family_id'],row['plugin_id'],self.cipher.encrypt(json.dumps(tokens).encode()).decode()))
+            db.execute('INSERT INTO oauth_tokens VALUES (?,?,?) ON CONFLICT (family_id,plugin_id) DO UPDATE SET token=excluded.token',(row['family_id'],row['plugin_id'],self.cipher.encrypt(json.dumps(tokens).encode()).decode()))
             db.execute('DELETE FROM plugin_connections WHERE family_id=? AND plugin_id=?',(row['family_id'],row['plugin_id']))
         return {'family_id':row['family_id'],'plugin_id':row['plugin_id'],'status':'authorized'}
 
