@@ -83,6 +83,26 @@ class TaskStore(GoalLedger):
                     summary TEXT NOT NULL, updated_at TEXT NOT NULL,
                     PRIMARY KEY(family_id, scope_id)
                 );
+                CREATE TABLE IF NOT EXISTS security_settings (
+                    family_id TEXT PRIMARY KEY, enabled INTEGER NOT NULL DEFAULT 1,
+                    alert_level TEXT NOT NULL DEFAULT 'important',
+                    instructions TEXT NOT NULL DEFAULT '', updated_at TEXT NOT NULL
+                );
+                CREATE TABLE IF NOT EXISTS security_reviews (
+                    id TEXT PRIMARY KEY, family_id TEXT NOT NULL, incoming_id TEXT NOT NULL,
+                    status TEXT NOT NULL DEFAULT 'queued', action TEXT NOT NULL DEFAULT '',
+                    severity TEXT NOT NULL DEFAULT '', category TEXT NOT NULL DEFAULT '',
+                    summary TEXT NOT NULL DEFAULT '', reason TEXT NOT NULL DEFAULT '',
+                    child_id TEXT NOT NULL DEFAULT '', dismissed INTEGER NOT NULL DEFAULT 0,
+                    failure TEXT NOT NULL DEFAULT '', created_at TEXT NOT NULL, processed_at TEXT,
+                    UNIQUE(family_id, incoming_id)
+                );
+                CREATE TABLE IF NOT EXISTS security_activities (
+                    id TEXT PRIMARY KEY, review_id TEXT NOT NULL,
+                    kind TEXT NOT NULL, summary TEXT NOT NULL,
+                    detail TEXT NOT NULL DEFAULT '{}', created_at TEXT NOT NULL,
+                    FOREIGN KEY(review_id) REFERENCES security_reviews(id) ON DELETE CASCADE
+                );
             """)
             connection.executescript("""
                 CREATE TABLE IF NOT EXISTS family_context (family_id TEXT PRIMARY KEY, payload TEXT NOT NULL);
@@ -207,6 +227,91 @@ class TaskStore(GoalLedger):
                 ON CONFLICT (family_id,scope_id) DO UPDATE SET summary=excluded.summary,updated_at=excluded.updated_at""",
                 (family_id, scope_id, summary, now()),
             )
+
+    def security_settings(self, family_id: str) -> dict[str, object]:
+        with self._connect() as connection:
+            row = connection.execute("SELECT * FROM security_settings WHERE family_id=?", (family_id,)).fetchone()
+            if not row:
+                return {"family_id": family_id, "enabled": True, "alert_level": "important", "instructions": "", "updated_at": ""}
+            item = dict(row)
+            item["enabled"] = bool(item["enabled"])
+            return item
+
+    def update_security_settings(self, family_id: str, enabled: bool, alert_level: str, instructions: str) -> dict[str, object]:
+        if alert_level not in {"urgent", "important", "all"}:
+            raise ValueError("Choose a valid security alert level.")
+        with self._connect() as connection:
+            connection.execute(
+                """INSERT INTO security_settings VALUES (?,?,?,?,?)
+                ON CONFLICT (family_id) DO UPDATE SET enabled=excluded.enabled,alert_level=excluded.alert_level,
+                instructions=excluded.instructions,updated_at=excluded.updated_at""",
+                (family_id, int(enabled), alert_level, instructions.strip(), now()),
+            )
+        return self.security_settings(family_id)
+
+    def receive_security_review(self, family_id: str, incoming_id: str) -> tuple[dict[str, object], bool]:
+        with self._connect() as connection:
+            connection.execute("BEGIN IMMEDIATE")
+            existing = connection.execute(
+                "SELECT * FROM security_reviews WHERE family_id=? AND incoming_id=?",
+                (family_id, incoming_id),
+            ).fetchone()
+            if existing:
+                return self._security_snapshot(connection, existing), False
+            identity = str(uuid4())
+            connection.execute(
+                """INSERT INTO security_reviews
+                (id,family_id,incoming_id,status,created_at) VALUES (?,?,?,'queued',?)""",
+                (identity, family_id, incoming_id, now()),
+            )
+            connection.execute(
+                "INSERT INTO security_activities VALUES (?,?,?,?,?,?)",
+                (str(uuid4()), identity, "received", "Security Agent received the item.", "{}", now()),
+            )
+            row = connection.execute("SELECT * FROM security_reviews WHERE id=?", (identity,)).fetchone()
+            return self._security_snapshot(connection, row), True
+
+    def security_review(self, review_id: str, family_id: str | None = None) -> dict[str, object] | None:
+        with self._connect() as connection:
+            if family_id:
+                row = connection.execute("SELECT * FROM security_reviews WHERE id=? AND family_id=?", (review_id, family_id)).fetchone()
+            else:
+                row = connection.execute("SELECT * FROM security_reviews WHERE id=?", (review_id,)).fetchone()
+            return self._security_snapshot(connection, row) if row else None
+
+    def security_reviews(self, family_id: str) -> list[dict[str, object]]:
+        with self._connect() as connection:
+            rows = connection.execute(
+                """SELECT * FROM security_reviews WHERE family_id=?
+                AND (action='alert' OR status IN ('queued','processing','failed'))
+                ORDER BY created_at DESC""",
+                (family_id,),
+            ).fetchall()
+            return [self._security_snapshot(connection, row) for row in rows]
+
+    def set_security_review(self, review_id: str, **changes: object) -> None:
+        allowed = {"status", "action", "severity", "category", "summary", "reason", "child_id", "dismissed", "failure", "processed_at"}
+        values = {key: value for key, value in changes.items() if key in allowed}
+        if not values:
+            return
+        clause = ", ".join(f"{key}=?" for key in values)
+        with self._connect() as connection:
+            connection.execute(f"UPDATE security_reviews SET {clause} WHERE id=?", (*values.values(), review_id))
+
+    def add_security_activity(self, review_id: str, kind: str, summary: str, detail: object | None = None) -> None:
+        with self._connect() as connection:
+            connection.execute(
+                "INSERT INTO security_activities VALUES (?,?,?,?,?,?)",
+                (str(uuid4()), review_id, kind, summary.strip(), json.dumps(detail or {}, default=str), now()),
+            )
+
+    def dismiss_security_alert(self, family_id: str, review_id: str) -> bool:
+        with self._connect() as connection:
+            result = connection.execute(
+                "UPDATE security_reviews SET dismissed=1 WHERE id=? AND family_id=? AND action='alert'",
+                (review_id, family_id),
+            )
+            return result.rowcount > 0
 
     def get(self, family_id: str, goal_id: str) -> dict[str, object] | None:
         with self._connect() as connection:
@@ -346,6 +451,21 @@ class TaskStore(GoalLedger):
             {**dict(activity), "detail": json.loads(activity["detail"] or "{}")}
             for activity in connection.execute(
                 "SELECT * FROM intake_activities WHERE incoming_id=? ORDER BY created_at",
+                (item["id"],),
+            )
+        ]
+        return item
+
+    @staticmethod
+    def _security_snapshot(connection, row) -> dict[str, object]:
+        item = dict(row)
+        item["dismissed"] = bool(item["dismissed"])
+        incoming = connection.execute("SELECT * FROM incoming_items WHERE id=?", (item["incoming_id"],)).fetchone()
+        item["incoming"] = TaskStore._incoming_snapshot(connection, incoming) if incoming else None
+        item["activities"] = [
+            {**dict(activity), "detail": json.loads(activity["detail"] or "{}")}
+            for activity in connection.execute(
+                "SELECT * FROM security_activities WHERE review_id=? ORDER BY created_at",
                 (item["id"],),
             )
         ]

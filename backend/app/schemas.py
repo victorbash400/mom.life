@@ -53,6 +53,12 @@ class IntakeRetry(BaseModel):
     guidance: str = Field(default="", max_length=20_000)
 
 
+class SecuritySettingsWrite(BaseModel):
+    enabled: bool = True
+    alert_level: Literal["urgent", "important", "all"] = "important"
+    instructions: str = Field(default="", max_length=4_000)
+
+
 class SkillWrite(BaseModel):
     name: str = Field(min_length=1,max_length=120)
     description: str = Field(min_length=1,max_length=1000)

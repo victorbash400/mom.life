@@ -26,7 +26,7 @@ def test_demo_login_revocation_and_expiry(auth_headers):
 
 def test_all_family_surfaces_require_login():
     client = TestClient(main.app)
-    for path in ['tasks', 'plugins', 'skills', 'runtime', 'tasks/events']:
+    for path in ['tasks', 'plugins', 'skills', 'runtime', 'tasks/events', 'security']:
         assert client.get(f'/api/{path}?family_id=sarah-family').status_code == 401
     assert client.post('/api/chat/stream', json={'family_id':'sarah-family','message':'Hi','chat_id':'test'}).status_code == 401
     assert client.get('/health').status_code == 200

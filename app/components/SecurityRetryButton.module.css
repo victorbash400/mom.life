@@ -1,0 +1,6 @@
+.action { position: relative; display: inline-flex; }
+.action button { display: grid; width: 22px; height: 22px; padding: 0; place-items: center; border: 0; border-radius: 5px; color: #8b8b86; background: transparent; cursor: pointer; }
+.action button:hover:not(:disabled) { background: #f0f0ed; color: #3e3e3b; }
+.action button:disabled { opacity: .35; cursor: default; }
+.action button svg { width: 11px; height: 11px; }
+.action small { position: absolute; top: 27px; right: 0; z-index: 2; width: 180px; padding: 7px; border: 1px solid #ebd7d5; border-radius: 7px; color: #a33c37; background: #fff; font-size: 9px; }

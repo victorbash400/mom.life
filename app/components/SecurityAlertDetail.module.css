@@ -1,0 +1,20 @@
+.detail { display: grid; min-width: 0; min-height: 0; grid-template-rows: auto minmax(0, 1fr); }
+.detail > header { display: flex; min-height: 64px; padding: 14px 20px; align-items: center; justify-content: space-between; gap: 16px; border-bottom: 1px solid #ededeb; }
+.detail > header span { min-width: 0; }
+.detail > header strong, .detail > header small { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.detail > header strong { color: #343431; font-size: 12px; font-weight: 590; }
+.detail > header small { margin-top: 5px; color: #93938e; font-size: 9px; text-transform: capitalize; }
+.detail > header button { display: inline-flex; height: 28px; padding: 0 10px; flex: none; align-items: center; gap: 5px; border: 1px solid #deded9; border-radius: 8px; color: #595955; background: #fff; font-size: 10px; cursor: pointer; }
+.detail > header button:hover { background: #f7f7f5; }
+.detail > header button:disabled { opacity: .45; cursor: default; }
+.detail > header button svg { width: 12px; height: 12px; }
+.detail > section { display: grid; padding: 20px; align-content: start; overflow-y: auto; background: #fff; overscroll-behavior: contain; }
+.detail article { width: 100%; }
+.detail article header { display: flex; margin-bottom: 8px; align-items: baseline; justify-content: space-between; gap: 12px; }
+.detail article strong { color: #555550; font-size: 10px; font-weight: 600; }
+.detail article time { color: #a1a19c; font-size: 9px; }
+.detail article p, .detail article blockquote { max-width: 640px; color: #454541; font-size: 11px; line-height: 1.65; white-space: pre-wrap; }
+.detail article p { margin: 0; }
+.detail article blockquote { margin: 18px 0 0; padding: 14px 16px; border-left: 2px solid #d8c0b8; background: #faf8f6; }
+.detail article > small { display: block; margin-top: 12px; color: #a33c37; font-size: 10px; }
+@media (max-width: 760px) { .detail { display: none; } }

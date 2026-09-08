@@ -5,5 +5,7 @@
 .actions { display: flex; gap: clamp(16px, 2.15vw, 31px); align-items: center; }
 .actions button { display: grid; width: 44px; height: 44px; padding: 0; place-items: center; color: #8f665d; border: 0; background: transparent; cursor: pointer; }
 .actions svg { width: 36px; height: 36px; stroke-width: 1.55; }
+.actions button { position: relative; }
+.actions button i { position: absolute; top: 3px; right: 2px; width: 7px; height: 7px; border: 1px solid #f8eee8; border-radius: 50%; background: #b23f39; }
 .actions button:hover, .actions button[aria-expanded="true"], .greeting:hover { opacity: .72; }
 @media (max-width: 620px) { .header { top: 20px; right: 22px; left: 22px; } .greeting img { width: 38px; height: 38px; } .actions { gap: 14px; } .actions button { width: 34px; } .actions svg { width: 28px; height: 28px; } }
