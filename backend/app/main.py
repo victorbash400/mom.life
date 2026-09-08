@@ -20,9 +20,11 @@ from plugins.catalog import PLUGINS, plugin_by_id, plugin_snapshot
 @asynccontextmanager
 async def lifespan(app):
     task_store.recover()
+    await intake_agent.recover()
     try:
         yield
     finally:
+        await intake_agent.shutdown()
         await goal_tasks.shutdown()
 
 
@@ -36,6 +38,8 @@ app.include_router(chat_router)
 app.middleware("http")(require_session)
 from app.goal_routes import router as goal_router
 app.include_router(goal_router)
+from app.intake_routes import router as intake_router
+app.include_router(intake_router)
 from app.whatsapp_webhook import router as webhook_router
 app.include_router(webhook_router)
 from app.oauth_routes import router as oauth_router
@@ -43,6 +47,8 @@ app.include_router(oauth_router)
 settings = get_settings()
 task_store = TaskStore(settings.database_url)
 goal_tasks = GoalTaskManager(task_store)
+from app.intake_agent import IntakeAgentManager
+intake_agent = IntakeAgentManager(task_store, goal_tasks)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=settings.allowed_origins,

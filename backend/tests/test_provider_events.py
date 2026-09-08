@@ -66,3 +66,28 @@ def test_plan_revision_invalidates_old_event_wait(tmp_path):
     store.apply_plan('family',goal['id'],[AssignmentPlan(action='cancel',task_id=identity)])
     assert ledger.receive('family','whatsapp','event','sender',{'text':'Confirmed'})==[]
     assert store.assignment(identity)['status']=='cancelled'
+
+
+def test_unmatched_whatsapp_message_enters_intake_once(tmp_path,monkeypatch):
+    from app import main
+    store=TaskStore(tmp_path/'unmatched.db')
+    store.install_plugin('family','whatsapp')
+    goal_manager=AsyncMock()
+    intake_manager=AsyncMock()
+    monkeypatch.setattr(main,'task_store',store)
+    monkeypatch.setattr(main,'goal_tasks',goal_manager)
+    monkeypatch.setattr(main,'intake_agent',intake_manager)
+    monkeypatch.setenv('MOM_LIFE_WHATSAPP_APP_SECRET','secret')
+    monkeypatch.setenv('MOM_LIFE_PLUGIN_WHATSAPP_FAMILY_ID','family')
+    monkeypatch.setenv('MOM_LIFE_PLUGIN_WHATSAPP_PHONE_NUMBER_ID','123')
+    payload={'entry':[{'changes':[{'value':{'metadata':{'phone_number_id':'123'},'messages':[{'id':'message-new','from':'254700000000','text':{'body':'School closes early Friday'}}]}}]}]}
+    raw=json.dumps(payload).encode()
+    headers={'x-hub-signature-256':'sha256='+hmac.new(b'secret',raw,hashlib.sha256).hexdigest()}
+    client=TestClient(main.app)
+    assert client.post('/api/webhooks/whatsapp',content=raw,headers=headers).status_code==200
+    assert client.post('/api/webhooks/whatsapp',content=raw,headers=headers).status_code==200
+    intake_manager.receive.assert_awaited_once_with(
+        'family','whatsapp','message-new',correlation='254700000000',sender='254700000000',
+        content='School closes early Friday',payload=payload['entry'][0]['changes'][0]['value']['messages'][0],
+    )
+    goal_manager.start.assert_not_awaited()

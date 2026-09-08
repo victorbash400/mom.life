@@ -130,10 +130,24 @@ async def upload(identity: str, request: Request, file: UploadFile = File(), par
     name = (file.filename or 'File').replace('\\','/').split('/')[-1].strip()[:180]
     if not name:
         raise HTTPException(400,'A filename is required.')
+    media_type = file.content_type or 'application/octet-stream'
     try:
-        return {'id':families.add_node(family,identity,parent_id,name,content,file.content_type or 'application/octet-stream')}
+        node_id = families.add_node(family,identity,parent_id,name,content,media_type)
     except (ValueError,UniqueViolation):
         raise HTTPException(409,'Folder is missing or this name already exists.')
+    from app.incoming_content import extract_upload_text
+    from app.main import intake_agent
+    await intake_agent.receive(
+        family,
+        'upload',
+        node_id,
+        correlation=node_id,
+        sender='Mom',
+        subject=name,
+        content=extract_upload_text(content,media_type,name),
+        payload={'node_id':node_id,'child_id':identity,'parent_id':parent_id,'filename':name,'media_type':media_type},
+    )
+    return {'id':node_id}
 
 
 @router.get('/children/{identity}/files/{node_id}')

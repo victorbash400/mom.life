@@ -61,6 +61,28 @@ class TaskStore(GoalLedger):
                     version INTEGER NOT NULL DEFAULT 1, created_at TEXT NOT NULL,
                     UNIQUE(family_id, slug)
                 );
+                CREATE TABLE IF NOT EXISTS incoming_items (
+                    id TEXT PRIMARY KEY, family_id TEXT NOT NULL, source TEXT NOT NULL,
+                    provider_event_id TEXT NOT NULL, correlation TEXT NOT NULL DEFAULT '',
+                    sender TEXT NOT NULL DEFAULT '', subject TEXT NOT NULL DEFAULT '',
+                    content TEXT NOT NULL DEFAULT '', payload TEXT NOT NULL DEFAULT '{}',
+                    status TEXT NOT NULL DEFAULT 'queued', action TEXT NOT NULL DEFAULT '',
+                    reason TEXT NOT NULL DEFAULT '', child_id TEXT NOT NULL DEFAULT '',
+                    goal_id TEXT NOT NULL DEFAULT '', attention_required INTEGER NOT NULL DEFAULT 0,
+                    failure TEXT NOT NULL DEFAULT '', created_at TEXT NOT NULL, processed_at TEXT,
+                    UNIQUE(family_id, source, provider_event_id)
+                );
+                CREATE TABLE IF NOT EXISTS intake_activities (
+                    id TEXT PRIMARY KEY, incoming_id TEXT NOT NULL,
+                    kind TEXT NOT NULL, summary TEXT NOT NULL,
+                    detail TEXT NOT NULL DEFAULT '{}', created_at TEXT NOT NULL,
+                    FOREIGN KEY(incoming_id) REFERENCES incoming_items(id) ON DELETE CASCADE
+                );
+                CREATE TABLE IF NOT EXISTS family_intake_memory (
+                    family_id TEXT NOT NULL, scope_id TEXT NOT NULL,
+                    summary TEXT NOT NULL, updated_at TEXT NOT NULL,
+                    PRIMARY KEY(family_id, scope_id)
+                );
             """)
             connection.executescript("""
                 CREATE TABLE IF NOT EXISTS family_context (family_id TEXT PRIMARY KEY, payload TEXT NOT NULL);
@@ -95,6 +117,96 @@ class TaskStore(GoalLedger):
         with self._connect() as connection:
             rows = connection.execute("SELECT * FROM family_tasks WHERE family_id=? ORDER BY created_at DESC", (family_id,)).fetchall()
             return [self._goal_snapshot(connection, row) for row in rows]
+
+    def receive_incoming(
+        self,
+        family_id: str,
+        source: str,
+        provider_event_id: str,
+        *,
+        correlation: str = "",
+        sender: str = "",
+        subject: str = "",
+        content: str = "",
+        payload: object | None = None,
+    ) -> tuple[dict[str, object], bool]:
+        source = source.strip()
+        provider_event_id = provider_event_id.strip()
+        if not source or not provider_event_id:
+            raise ValueError("Incoming information needs a source and provider event ID.")
+        with self._connect() as connection:
+            connection.execute("BEGIN IMMEDIATE")
+            existing = connection.execute(
+                "SELECT * FROM incoming_items WHERE family_id=? AND source=? AND provider_event_id=?",
+                (family_id, source, provider_event_id),
+            ).fetchone()
+            if existing:
+                return self._incoming_snapshot(connection, existing), False
+            identity = str(uuid4())
+            connection.execute(
+                """INSERT INTO incoming_items
+                (id,family_id,source,provider_event_id,correlation,sender,subject,content,payload,status,created_at)
+                VALUES (?,?,?,?,?,?,?,?,?,'queued',?)""",
+                (identity, family_id, source, provider_event_id, correlation, sender, subject, content, json.dumps(payload or {}, default=str), now()),
+            )
+            connection.execute(
+                "INSERT INTO intake_activities VALUES (?,?,?,?,?,?)",
+                (str(uuid4()), identity, "received", f"Received information from {source}.", "{}", now()),
+            )
+            row = connection.execute("SELECT * FROM incoming_items WHERE id=?", (identity,)).fetchone()
+            return self._incoming_snapshot(connection, row), True
+
+    def incoming(self, incoming_id: str, family_id: str | None = None) -> dict[str, object] | None:
+        with self._connect() as connection:
+            if family_id:
+                row = connection.execute("SELECT * FROM incoming_items WHERE id=? AND family_id=?", (incoming_id, family_id)).fetchone()
+            else:
+                row = connection.execute("SELECT * FROM incoming_items WHERE id=?", (incoming_id,)).fetchone()
+            return self._incoming_snapshot(connection, row) if row else None
+
+    def incoming_items(self, family_id: str) -> list[dict[str, object]]:
+        with self._connect() as connection:
+            rows = connection.execute("SELECT * FROM incoming_items WHERE family_id=? ORDER BY created_at DESC", (family_id,)).fetchall()
+            return [self._incoming_snapshot(connection, row) for row in rows]
+
+    def delete_incoming(self, family_id: str, incoming_id: str) -> bool:
+        with self._connect() as connection:
+            result = connection.execute("DELETE FROM incoming_items WHERE id=? AND family_id=?", (incoming_id, family_id))
+            return result.rowcount > 0
+
+    def set_incoming(self, incoming_id: str, **changes: object) -> None:
+        allowed = {"status", "action", "reason", "child_id", "goal_id", "attention_required", "failure", "processed_at"}
+        values = {key: value for key, value in changes.items() if key in allowed}
+        if not values:
+            return
+        clause = ", ".join(f"{key}=?" for key in values)
+        with self._connect() as connection:
+            connection.execute(f"UPDATE incoming_items SET {clause} WHERE id=?", (*values.values(), incoming_id))
+
+    def add_intake_activity(self, incoming_id: str, kind: str, summary: str, detail: object | None = None) -> None:
+        with self._connect() as connection:
+            connection.execute(
+                "INSERT INTO intake_activities VALUES (?,?,?,?,?,?)",
+                (str(uuid4()), incoming_id, kind, summary.strip(), json.dumps(detail or {}, default=str), now()),
+            )
+
+    def intake_memory(self, family_id: str) -> dict[str, str]:
+        with self._connect() as connection:
+            return {
+                str(row["scope_id"]): str(row["summary"])
+                for row in connection.execute(
+                    "SELECT scope_id,summary FROM family_intake_memory WHERE family_id=? ORDER BY scope_id",
+                    (family_id,),
+                )
+            }
+
+    def update_intake_memory(self, family_id: str, scope_id: str, summary: str) -> None:
+        with self._connect() as connection:
+            connection.execute(
+                """INSERT INTO family_intake_memory VALUES (?,?,?,?)
+                ON CONFLICT (family_id,scope_id) DO UPDATE SET summary=excluded.summary,updated_at=excluded.updated_at""",
+                (family_id, scope_id, summary, now()),
+            )
 
     def get(self, family_id: str, goal_id: str) -> dict[str, object] | None:
         with self._connect() as connection:
@@ -224,6 +336,20 @@ class TaskStore(GoalLedger):
         goal["questions"] = [{**dict(question), "action": json.loads(question["action"]) if question["action"] else None} for question in connection.execute("SELECT * FROM goal_questions WHERE goal_id=? ORDER BY created_at", (row["id"],))]
         goal["activities"] = [{**dict(item), "evidence": json.loads(item["evidence"])} for item in connection.execute("SELECT * FROM goal_activities WHERE goal_id=? ORDER BY created_at", (row["id"],))]
         return goal
+
+    @staticmethod
+    def _incoming_snapshot(connection, row) -> dict[str, object]:
+        item = dict(row)
+        item["payload"] = json.loads(item["payload"] or "{}")
+        item["attention_required"] = bool(item["attention_required"])
+        item["activities"] = [
+            {**dict(activity), "detail": json.loads(activity["detail"] or "{}")}
+            for activity in connection.execute(
+                "SELECT * FROM intake_activities WHERE incoming_id=? ORDER BY created_at",
+                (item["id"],),
+            )
+        ]
+        return item
 
     @staticmethod
     def _assignment_snapshot(row: sqlite3.Row) -> dict[str, object]:
