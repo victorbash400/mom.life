@@ -103,6 +103,18 @@ class TaskStore(GoalLedger):
                     detail TEXT NOT NULL DEFAULT '{}', created_at TEXT NOT NULL,
                     FOREIGN KEY(review_id) REFERENCES security_reviews(id) ON DELETE CASCADE
                 );
+                CREATE TABLE IF NOT EXISTS family_education_snapshots (
+                    family_id TEXT NOT NULL, child_id TEXT NOT NULL,
+                    summary TEXT NOT NULL, source_ids TEXT NOT NULL DEFAULT '[]',
+                    updated_at TEXT NOT NULL, PRIMARY KEY(family_id, child_id)
+                );
+                CREATE TABLE IF NOT EXISTS education_reviews (
+                    id TEXT PRIMARY KEY, family_id TEXT NOT NULL, incoming_id TEXT NOT NULL,
+                    status TEXT NOT NULL DEFAULT 'queued', action TEXT NOT NULL DEFAULT '',
+                    reason TEXT NOT NULL DEFAULT '', failure TEXT NOT NULL DEFAULT '',
+                    created_at TEXT NOT NULL, processed_at TEXT,
+                    UNIQUE(family_id, incoming_id)
+                );
             """)
             connection.executescript("""
                 CREATE TABLE IF NOT EXISTS family_context (family_id TEXT PRIMARY KEY, payload TEXT NOT NULL);
@@ -313,6 +325,88 @@ class TaskStore(GoalLedger):
             )
             return result.rowcount > 0
 
+    def education_snapshot(self, family_id: str, child_id: str) -> dict[str, object] | None:
+        with self._connect() as connection:
+            row = connection.execute(
+                "SELECT * FROM family_education_snapshots WHERE family_id=? AND child_id=?",
+                (family_id, child_id),
+            ).fetchone()
+            return self._education_snapshot(row) if row else None
+
+    def education_snapshots(self, family_id: str) -> list[dict[str, object]]:
+        with self._connect() as connection:
+            rows = connection.execute(
+                "SELECT * FROM family_education_snapshots WHERE family_id=? ORDER BY updated_at DESC",
+                (family_id,),
+            ).fetchall()
+            return [self._education_snapshot(row) for row in rows]
+
+    def delete_education_snapshot(self, family_id: str, child_id: str) -> None:
+        with self._connect() as connection:
+            connection.execute(
+                "DELETE FROM family_education_snapshots WHERE family_id=? AND child_id=?",
+                (family_id, child_id),
+            )
+
+    def update_education_snapshot(self, family_id: str, child_id: str, summary: str, source_id: str) -> dict[str, object]:
+        with self._connect() as connection:
+            connection.execute("BEGIN IMMEDIATE")
+            existing = connection.execute(
+                "SELECT * FROM family_education_snapshots WHERE family_id=? AND child_id=?",
+                (family_id, child_id),
+            ).fetchone()
+            sources = json.loads(existing["source_ids"] or "[]") if existing else []
+            if source_id not in sources:
+                sources.append(source_id)
+            connection.execute(
+                """INSERT INTO family_education_snapshots VALUES (?,?,?,?,?)
+                ON CONFLICT (family_id,child_id) DO UPDATE SET
+                summary=excluded.summary,source_ids=excluded.source_ids,updated_at=excluded.updated_at""",
+                (family_id, child_id, summary.strip(), json.dumps(sources), now()),
+            )
+            row = connection.execute(
+                "SELECT * FROM family_education_snapshots WHERE family_id=? AND child_id=?",
+                (family_id, child_id),
+            ).fetchone()
+            return self._education_snapshot(row)
+
+    def receive_education_review(self, family_id: str, incoming_id: str) -> tuple[dict[str, object], bool]:
+        with self._connect() as connection:
+            connection.execute("BEGIN IMMEDIATE")
+            existing = connection.execute(
+                "SELECT * FROM education_reviews WHERE family_id=? AND incoming_id=?",
+                (family_id, incoming_id),
+            ).fetchone()
+            if existing:
+                return self._education_review_snapshot(connection, existing), False
+            identity = str(uuid4())
+            connection.execute(
+                "INSERT INTO education_reviews (id,family_id,incoming_id,status,created_at) VALUES (?,?,?,'queued',?)",
+                (identity, family_id, incoming_id, now()),
+            )
+            row = connection.execute("SELECT * FROM education_reviews WHERE id=?", (identity,)).fetchone()
+            return self._education_review_snapshot(connection, row), True
+
+    def education_review(self, review_id: str, family_id: str | None = None) -> dict[str, object] | None:
+        with self._connect() as connection:
+            if family_id:
+                row = connection.execute(
+                    "SELECT * FROM education_reviews WHERE id=? AND family_id=?",
+                    (review_id, family_id),
+                ).fetchone()
+            else:
+                row = connection.execute("SELECT * FROM education_reviews WHERE id=?", (review_id,)).fetchone()
+            return self._education_review_snapshot(connection, row) if row else None
+
+    def set_education_review(self, review_id: str, **changes: object) -> None:
+        allowed = {"status", "action", "reason", "failure", "processed_at"}
+        values = {key: value for key, value in changes.items() if key in allowed}
+        if not values:
+            return
+        clause = ", ".join(f"{key}=?" for key in values)
+        with self._connect() as connection:
+            connection.execute(f"UPDATE education_reviews SET {clause} WHERE id=?", (*values.values(), review_id))
+
     def get(self, family_id: str, goal_id: str) -> dict[str, object] | None:
         with self._connect() as connection:
             row = connection.execute("SELECT * FROM family_tasks WHERE id=? AND family_id=?", (goal_id, family_id)).fetchone()
@@ -472,6 +566,19 @@ class TaskStore(GoalLedger):
                 (item["id"],),
             )
         ]
+        return item
+
+    @staticmethod
+    def _education_snapshot(row) -> dict[str, object]:
+        item = dict(row)
+        item["source_ids"] = json.loads(item["source_ids"] or "[]")
+        return item
+
+    @staticmethod
+    def _education_review_snapshot(connection, row) -> dict[str, object]:
+        item = dict(row)
+        incoming = connection.execute("SELECT * FROM incoming_items WHERE id=?", (item["incoming_id"],)).fetchone()
+        item["incoming"] = TaskStore._incoming_snapshot(connection, incoming) if incoming else None
         return item
 
     @staticmethod

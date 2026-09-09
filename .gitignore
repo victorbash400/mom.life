@@ -1,6 +1,7 @@
 .next/
 node_modules/
 backend/.env
+mom-life-app_accessKeys.csv
 backend/.sessions/
 backend/data/
 backend/__pycache__/

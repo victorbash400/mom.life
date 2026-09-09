@@ -21,12 +21,14 @@ from plugins.catalog import PLUGINS, plugin_by_id, plugin_snapshot
 async def lifespan(app):
     task_store.recover()
     await security_agent.recover()
+    await education_agent.recover()
     await intake_agent.recover()
     try:
         yield
     finally:
         await intake_agent.shutdown()
         await security_agent.shutdown()
+        await education_agent.shutdown()
         await goal_tasks.shutdown()
 
 
@@ -44,6 +46,8 @@ from app.intake_routes import router as intake_router
 app.include_router(intake_router)
 from app.security_routes import router as security_router
 app.include_router(security_router)
+from app.education_routes import router as education_router
+app.include_router(education_router)
 from app.whatsapp_webhook import router as webhook_router
 app.include_router(webhook_router)
 from app.apple_health_routes import router as apple_health_router
@@ -55,8 +59,10 @@ task_store = TaskStore(settings.database_url)
 goal_tasks = GoalTaskManager(task_store)
 from app.security_agent import SecurityAgentManager
 security_agent = SecurityAgentManager(task_store)
+from app.education_agent import EducationAgentManager
+education_agent = EducationAgentManager(task_store)
 from app.intake_agent import IntakeAgentManager
-intake_agent = IntakeAgentManager(task_store, goal_tasks, security_agent)
+intake_agent = IntakeAgentManager(task_store, goal_tasks, security_agent, education_agent)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=settings.allowed_origins,

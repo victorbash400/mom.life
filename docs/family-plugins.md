@@ -34,6 +34,8 @@ Sources: [Workspace MCP configuration](https://developers.google.com/workspace/g
 
 Google Classroom exposes read-only `list_courses`, `list_coursework`, and `list_announcements` tools through the official Classroom REST API. It reuses mom.life's registered Google OAuth client while requesting a separate, narrow set of Classroom scopes and retaining a separate family-bound token. Standard Google accounts can use Classroom; school-managed features still depend on the school's licensing and policy. A guardian relationship can provide summaries but does not silently grant the parent student-level API access.
 
+The Education Agent reviews each newly persisted incoming item without keyword rules. It can discover read-only tools from connected Education-category plugins, then maintains one evidence-linked natural-language snapshot per known child. It records what the evidence supports about what the child is learning, how things appear to be going, meaningful changes, and anything important for the parent. It does not impose fixed subjects, progress labels, attendance, or a guessed curriculum. Existing incoming items without an education review are recovered on application startup; live items are dispatched by the intake manager. No polling is used.
+
 Source: [Google Classroom API overview](https://developers.google.com/workspace/classroom/guides/get-started), [Classroom users and guardians](https://developers.google.com/workspace/classroom/guides/key-concepts/user-types).
 
 ## Health and activity adapters
@@ -63,6 +65,8 @@ Source: [Meta-maintained business messaging sample and permissions](https://gith
 AgentCore Browser is listed with setup required, not connected from the mere presence of an AWS region. Its adapter contract is IAM-authorized session creation, session-scoped browser/CDP operations, observed page evidence, and explicit session cleanup. The implemented `browser_adapter.py` exposes inspect, navigate, click by exact observed role/name, and fill by exact observed label. It uses the AgentCore SDK and Playwright CDP connection; no local browser or server is launched. Ambiguous targets fail. Runs close their session on completion or failure. A human approval pause retains the assignment-bound session for up to its 15-minute TTL and disconnects the local CDP client. Resume reconnects to that exact session; expiry fails visibly instead of silently opening a blank browser. Plan revision and goal deletion explicitly stop retained sessions. Connection validation lists sessions to check the IAM identity without creating one; the first approved action establishes session creation access. Installing the directory entry alone does not establish IAM access.
 
 Source: [AgentCore Browser](https://docs.aws.amazon.com/bedrock-agentcore/latest/devguide/browser-tool.html).
+
+The local backend uses the dedicated `mom-life-app` IAM user through the `mom-life` AWS profile. Its inline `MomLifeApplicationAccess` policy permits Bedrock model invocation and AgentCore Browser operations only; it does not inherit the shared Operator identity. Production AWS compute should replace the local access key with an equivalent workload role.
 
 
 ## OAuth client setup

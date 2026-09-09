@@ -65,6 +65,7 @@ async def remove_child(identity: str, request: Request):
         if goal['child_id'] == identity and goal['status'] != 'completed':
             await goal_tasks.stop(goal['id'])
             task_store.set_goal_state(goal['id'],status='paused',run_state='paused',current_step='Child profile removed')
+    task_store.delete_education_snapshot(family, identity)
     families.remove_child(family,identity)
 
 

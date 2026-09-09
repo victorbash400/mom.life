@@ -12,10 +12,11 @@ logger = logging.getLogger(__name__)
 
 
 class IntakeAgentManager:
-    def __init__(self, store: TaskStore, goal_tasks, security_agent=None) -> None:
+    def __init__(self, store: TaskStore, goal_tasks, security_agent=None, education_agent=None) -> None:
         self.store = store
         self.goal_tasks = goal_tasks
         self.security_agent = security_agent
+        self.education_agent = education_agent
         self._tasks: dict[str, asyncio.Task[None]] = {}
 
     async def recover(self) -> None:
@@ -37,6 +38,8 @@ class IntakeAgentManager:
             await self.start(family_id, str(item["id"]))
             if self.security_agent:
                 await self.security_agent.receive(family_id, str(item["id"]))
+            if self.education_agent:
+                await self.education_agent.receive(family_id, str(item["id"]))
         return item, created
 
     async def start(self, family_id: str, incoming_id: str) -> bool:
