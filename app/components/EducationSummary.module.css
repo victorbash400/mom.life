@@ -1,0 +1,7 @@
+.summary { display: grid; padding: 20px 22px; grid-template-columns: minmax(0,1fr) auto; gap: 28px; align-items: center; border-bottom: 1px solid #ededeb; }
+.summary p { max-width: 610px; margin: 0; color: #4c4541; font-family: var(--font-display), Georgia, serif; font-size: clamp(18px,1.65vw,24px); line-height: 1.35; }
+.summary dl { display: flex; margin: 0; gap: 9px; }
+.summary dl div { display: grid; min-width: 76px; padding: 10px 12px; gap: 3px; border-radius: 13px; background: #faf4ef; }
+.summary dt { color: #8b7e78; font-size: 9px; }
+.summary dd { margin: 0; color: #76524e; font-size: 15px; font-weight: 600; }
+@media (max-width: 760px) { .summary { grid-template-columns: 1fr; gap: 16px; }.summary dl { width: 100%; }.summary dl div { min-width: 0; flex: 1; } }

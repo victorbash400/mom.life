@@ -1,0 +1,14 @@
+.section { min-width: 0; overflow: hidden; border: 1px solid #ece8e4; border-radius: 15px; background: #fff; }
+.section > header { display: flex; height: 43px; padding: 0 15px; align-items: center; justify-content: space-between; border-bottom: 1px solid #efedeb; }
+.section header strong { color: #504a47; font-size: 11px; font-weight: 600; }
+.section header small { color: #9a918d; font-size: 9px; }
+.section table { width: 100%; border-collapse: collapse; font-size: 11px; }
+.section th { padding: 10px 14px 7px; color: #9a918d; font-size: 9px; font-weight: 500; text-align: left; }
+.section td { padding: 11px 14px; color: #55514e; border-top: 1px solid #f0efed; }
+.section td:nth-child(2) { color: #827b77; }
+.section td:last-child { text-align: right; }
+.section td span { display: inline-block; padding: 4px 8px; border-radius: 999px; color: #567063; background: #edf5ef; font-size: 9px; white-space: nowrap; }
+.section td span[data-progress="Strong"] { color: #496b61; background: #e8f3ee; }
+.section td span[data-progress="Needs attention"] { color: #96624e; background: #fbede5; }
+.section > p { margin: 0; padding: 22px 15px; color: #97908c; font-size: 11px; }
+@media (max-width: 620px) { .section { overflow-x: auto; }.section table { min-width: 440px; } }
