@@ -21,7 +21,7 @@ def test_signed_event_wakes_only_exact_wait_and_deduplicates(tmp_path,monkeypatc
     manager=AsyncMock()
     monkeypatch.setattr(main,'task_store',store)
     monkeypatch.setattr(main,'goal_tasks',manager)
-    monkeypatch.setenv('MOM_LIFE_WHATSAPP_APP_SECRET','secret')
+    monkeypatch.setenv('MOM_LIFE_PLUGIN_WHATSAPP_APP_SECRET','secret')
     monkeypatch.setenv('MOM_LIFE_PLUGIN_WHATSAPP_FAMILY_ID','family')
     monkeypatch.setenv('MOM_LIFE_PLUGIN_WHATSAPP_PHONE_NUMBER_ID','123')
     payload={'entry':[{'changes':[{'value':{'metadata':{'phone_number_id':'123'},'messages':[{'id':'message-1','from':'254700000000','text':{'body':'Confirmed'}}]}}]}]}
@@ -77,7 +77,7 @@ def test_unmatched_whatsapp_message_enters_intake_once(tmp_path,monkeypatch):
     monkeypatch.setattr(main,'task_store',store)
     monkeypatch.setattr(main,'goal_tasks',goal_manager)
     monkeypatch.setattr(main,'intake_agent',intake_manager)
-    monkeypatch.setenv('MOM_LIFE_WHATSAPP_APP_SECRET','secret')
+    monkeypatch.setenv('MOM_LIFE_PLUGIN_WHATSAPP_APP_SECRET','secret')
     monkeypatch.setenv('MOM_LIFE_PLUGIN_WHATSAPP_FAMILY_ID','family')
     monkeypatch.setenv('MOM_LIFE_PLUGIN_WHATSAPP_PHONE_NUMBER_ID','123')
     payload={'entry':[{'changes':[{'value':{'metadata':{'phone_number_id':'123'},'messages':[{'id':'message-new','from':'254700000000','text':{'body':'School closes early Friday'}}]}}]}]}

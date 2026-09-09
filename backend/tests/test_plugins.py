@@ -82,47 +82,6 @@ def test_google_workspace_adapter_keeps_services_bounded():
         asyncio.run(gmail.call('send_message',{}))
 
 
-def test_api_credentials_are_family_scoped(monkeypatch):
-    configured(monkeypatch,'microsoft-family')
-    with pytest.raises(RuntimeError,match='family identity'):
-        ApiAdapter('microsoft-family','other')
-
-
-def test_graph_draft_is_bounded_and_does_not_send(monkeypatch):
-    configured(monkeypatch,'microsoft-family')
-    def handler(request):
-        assert request.method=='POST'
-        assert request.url.path=='/v1.0/me/messages'
-        assert json.loads(request.content)['body']['content']=='Please review'
-        return httpx.Response(201,json={'id':'draft-123','isDraft':True})
-    adapter=ApiAdapter('microsoft-family','family',httpx.MockTransport(handler))
-    assert asyncio.run(adapter.call('create_draft',{'subject':'Trip','body':'Please review'}))['data']['isDraft']
-    with pytest.raises(ValueError):
-        asyncio.run(adapter.call('send_mail',{}))
-    with pytest.raises(ValueError):
-        asyncio.run(adapter.call('create_draft',{'subject':'Trip','body':'Review','url':'https://elsewhere'}))
-
-
-def test_fhir_patient_scope_is_not_model_controlled(monkeypatch):
-    prefix=configured(monkeypatch,'mychart')
-    monkeypatch.setenv(prefix+'_URL','https://provider.example/fhir/R4')
-    monkeypatch.setenv(prefix+'_PATIENT_ID','child-123')
-    def handler(request):
-        assert request.url.params['patient']=='child-123'
-        return httpx.Response(200,json={'resourceType':'Bundle','entry':[]})
-    adapter=ApiAdapter('mychart','family',httpx.MockTransport(handler))
-    asyncio.run(adapter.call('read_observations',{}))
-    with pytest.raises(ValueError):
-        asyncio.run(adapter.call('read_observations',{'patient':'other'}))
-
-
-def test_provider_errors_surface(monkeypatch):
-    configured(monkeypatch,'microsoft-family')
-    adapter=ApiAdapter('microsoft-family','family',httpx.MockTransport(lambda request:httpx.Response(403)))
-    with pytest.raises(httpx.HTTPStatusError):
-        asyncio.run(adapter.call('list_events',{}))
-
-
 def test_browser_uses_observed_targets_and_closes_session(monkeypatch):
     from plugins import browser_adapter
     from types import SimpleNamespace
@@ -147,20 +106,6 @@ def test_browser_uses_observed_targets_and_closes_session(monkeypatch):
     asyncio.run(run())
 
 
-def test_amazon_product_request_uses_server_marketplace(monkeypatch):
-    prefix=configured(monkeypatch,'amazon-shopping')
-    monkeypatch.setenv(prefix+'_PARTNER_TAG','family-20')
-    monkeypatch.setenv(prefix+'_MARKETPLACE','www.amazon.com')
-    def handler(request):
-        assert request.url.host=='creatorsapi.amazon'
-        body=json.loads(request.content)
-        assert body['itemIds']==['B09B2SBHQK']
-        assert body['partnerTag']=='family-20'
-        return httpx.Response(200,json={'itemsResult':{'items':[]}})
-    adapter=ApiAdapter('amazon-shopping','family',httpx.MockTransport(handler))
-    asyncio.run(adapter.call('get_product',{'asin':'B09B2SBHQK'}))
-
-
 def test_whatsapp_validation_reads_identity_without_sending(monkeypatch):
     prefix=configured(monkeypatch,'whatsapp')
     monkeypatch.setenv(prefix+'_PHONE_NUMBER_ID','123456')
@@ -171,16 +116,6 @@ def test_whatsapp_validation_reads_identity_without_sending(monkeypatch):
         return httpx.Response(200,json={'id':'123456','verified_name':'Family helper'})
     adapter=ApiAdapter('whatsapp','family',httpx.MockTransport(handler))
     assert asyncio.run(adapter.validate())['status']=='success'
-
-
-def test_amazon_validation_rejects_empty_success_response(monkeypatch):
-    prefix=configured(monkeypatch,'amazon-shopping')
-    monkeypatch.setenv(prefix+'_PARTNER_TAG','family-20')
-    monkeypatch.setenv(prefix+'_MARKETPLACE','www.amazon.com')
-    monkeypatch.setenv(prefix+'_VALIDATION_ASIN','B09B2SBHQK')
-    adapter=ApiAdapter('amazon-shopping','family',httpx.MockTransport(lambda request:httpx.Response(200,json={'itemsResult':{'items':[]}})))
-    with pytest.raises(ValueError,match='no product'):
-        asyncio.run(adapter.validate())
 
 
 def test_google_classroom_adapter_reads_courses_and_coursework(monkeypatch):

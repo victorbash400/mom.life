@@ -24,24 +24,10 @@ class ApiAdapter:
         self.token = token or setting(self.prefix+'_TOKEN')
         if not self.token:
             raise RuntimeError('An authorized provider access token is required.')
-        if plugin_id not in {'microsoft-family','whatsapp','mychart','amazon-shopping','google-classroom','fitbit','withings'}:
+        if plugin_id not in {'whatsapp','google-classroom','fitbit','withings'}:
             raise RuntimeError('This provider requires the adapter setup described in docs/family-plugins.md.')
 
     def directory(self):
-        if self.plugin_id == 'amazon-shopping':
-            if not setting(self.prefix+'_PARTNER_TAG') or not setting(self.prefix+'_MARKETPLACE'):
-                raise RuntimeError('Configure the approved Associates partner tag and marketplace.')
-            return [definition('get_product','Read an Amazon product and review link by known ASIN.',{'asin':field('asin','Verified product ASIN')})]
-        if self.plugin_id == 'microsoft-family':
-            return [definition('list_events','Read the signed-in family calendar.'),definition('list_task_lists','Read Microsoft To Do lists.'),
-                    definition('list_messages','Read recent Outlook mail.'),
-                    definition('create_draft','Create an Outlook draft for Mom to review.',{'subject':field('subject','Subject'),'body':field('body','Plain text body')},True)]
-        if self.plugin_id == 'mychart':
-            if not setting(self.prefix+'_URL') or not setting(self.prefix+'_PATIENT_ID'):
-                raise RuntimeError('Configure the provider FHIR base URL and authorized patient ID.')
-            return [definition('read_patient','Read the patient selected during SMART authorization.'),
-                    definition('read_observations','Read observations for the authorized patient.'),
-                    definition('read_care_plans','Read existing clinician care plans for the authorized patient.')]
         if self.plugin_id == 'google-classroom':
             course = {'course_id':field('course_id','Google Classroom course ID')}
             return [definition('list_courses','Read active courses for the signed-in student.'),
@@ -70,26 +56,7 @@ class ApiAdapter:
             raise ValueError('Supply exactly the documented non-empty string arguments.')
         method, body, form = 'GET', None, None
         headers = {'Authorization':f'Bearer {self.token}'}
-        if self.plugin_id == 'amazon-shopping':
-            if not re.fullmatch(r'[A-Z0-9]{10}',arguments['asin']):
-                raise ValueError('A valid ASIN is required.')
-            marketplace = setting(self.prefix+'_MARKETPLACE')
-            url = 'https://creatorsapi.amazon/catalog/v1/getItems'
-            method,body = 'POST',{'itemIds':[arguments['asin']],'itemIdType':'ASIN','marketplace':marketplace,'partnerTag':setting(self.prefix+'_PARTNER_TAG'),'resources':['itemInfo.title','itemInfo.features','images.primary.small']}
-            headers['x-marketplace'] = marketplace
-        elif self.plugin_id == 'microsoft-family':
-            paths = {'list_events':'/me/events?$top=25','list_task_lists':'/me/todo/lists','list_messages':'/me/messages?$top=25','create_draft':'/me/messages'}
-            url = 'https://graph.microsoft.com/v1.0'+paths[name]
-            if name == 'create_draft':
-                method,body = 'POST',{'subject':arguments['subject'],'body':{'contentType':'Text','content':arguments['body']}}
-        elif self.plugin_id == 'mychart':
-            base = setting(self.prefix+'_URL').rstrip('/')
-            patient = setting(self.prefix+'_PATIENT_ID')
-            if not re.fullmatch(r'[A-Za-z0-9.\-]+',patient) or not base.startswith('https://'):
-                raise ValueError('Invalid FHIR patient identity or provider URL.')
-            path = {'read_patient':f'/Patient/{patient}','read_observations':f'/Observation?patient={patient}&_count=25','read_care_plans':f'/CarePlan?patient={patient}&_count=25'}[name]
-            url = base+path
-        elif self.plugin_id == 'google-classroom':
+        if self.plugin_id == 'google-classroom':
             paths = {'list_courses':'/v1/courses?courseStates=ACTIVE',
                      'list_coursework':f"/v1/courses/{arguments.get('course_id','')}/courseWork?courseWorkStates=PUBLISHED&orderBy=dueDate%20desc",
                      'list_announcements':f"/v1/courses/{arguments.get('course_id','')}/announcements?announcementStates=PUBLISHED&orderBy=updateTime%20desc"}
@@ -129,18 +96,6 @@ class ApiAdapter:
     async def validate(self):
         """Probe access without sending a message or creating a resource."""
         self.directory()
-        if self.plugin_id == 'microsoft-family':
-            return await self.call('list_task_lists',{})
-        if self.plugin_id == 'mychart':
-            return await self.call('read_patient',{})
-        if self.plugin_id == 'amazon-shopping':
-            asin = setting(self.prefix+'_VALIDATION_ASIN')
-            if not asin:
-                raise ValueError('Set the validation ASIN to a real product you want this connection to read.')
-            result = await self.call('get_product',{'asin':asin})
-            if not result['data'].get('itemsResult',{}).get('items'):
-                raise ValueError('The catalog returned no product. Check the ASIN and catalog permissions.')
-            return result
         if self.plugin_id == 'google-classroom':
             return await self.call('list_courses',{})
         if self.plugin_id == 'fitbit':

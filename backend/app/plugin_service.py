@@ -43,7 +43,7 @@ class PluginService:
             if plugin_id == 'google-workspace':
                 for namespace in enabled_namespaces:
                     await session.clients[namespace].validate()
-            elif plugin_id in {'microsoft-family','mychart','amazon-shopping','whatsapp','google-classroom','fitbit','withings'}:
+            elif plugin_id in {'whatsapp','google-classroom','fitbit','withings','apple-health'}:
                 await session.clients[plugin_id].validate()
             elif plugin_id == 'agentcore-browser':
                 await session.clients[plugin_id].validate()
@@ -57,22 +57,18 @@ class PluginService:
     @staticmethod
     def setup_fields(plugin_id):
         prefix = 'MOM_LIFE_PLUGIN_' + plugin_id.replace('-','_').upper()
-        if plugin_id in {'google-workspace','google-classroom','todoist','notion','canva','apple-health','health-connect'}:
+        if plugin_id in {'google-workspace','google-classroom','todoist','notion','canva','apple-health'}:
             return []
         if plugin_id == 'google-maps':
             return [{'name':prefix+'_TOKEN','configured':bool(setting(prefix+'_TOKEN'))}]
-        if plugin_id in {'microsoft-family','fitbit','withings','mychart'}:
+        if plugin_id in {'fitbit','withings'}:
             names = [prefix+'_OAUTH_CLIENT_ID',prefix+'_OAUTH_REDIRECT_URI']
-            if plugin_id == 'mychart':
-                names.extend([prefix+'_URL',prefix+'_PATIENT_ID'])
             return [{'name':name,'configured':bool(setting(name))} for name in names]
         suffixes = ['FAMILY_ID']
         if plugin_id != 'agentcore-browser':
             suffixes.append('TOKEN')
         extra = {
-            'home-assistant':['URL'],
-            'whatsapp':['PHONE_NUMBER_ID','API_VERSION'],
-            'amazon-shopping':['MARKETPLACE','PARTNER_TAG','VALIDATION_ASIN'],
+            'whatsapp':['PHONE_NUMBER_ID','API_VERSION','VERIFY_TOKEN','APP_SECRET'],
         }
         suffixes.extend(extra.get(plugin_id,[]))
         return [{'name':prefix+'_'+suffix,'configured':bool(setting(prefix+'_'+suffix))} for suffix in suffixes]

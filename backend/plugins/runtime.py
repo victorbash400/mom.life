@@ -40,6 +40,12 @@ class PluginToolSession:
             self.loaded[plugin_id] = adapter.directory()
             return self.loaded[plugin_id]
         if plugin.transport != 'mcp':
+            if owner(plugin_id) == 'apple-health':
+                from plugins.apple_health_adapter import AppleHealthAdapter
+                adapter = AppleHealthAdapter(self.family_id,self.store)
+                self.clients[plugin_id] = adapter
+                self.loaded[plugin_id] = adapter.directory()
+                return self.loaded[plugin_id]
             if owner(plugin_id) == 'google-workspace':
                 from plugins.google_workspace_adapter import GoogleWorkspaceAdapter
                 adapter = GoogleWorkspaceAdapter(plugin_id,await self.oauth_token('google-workspace'))

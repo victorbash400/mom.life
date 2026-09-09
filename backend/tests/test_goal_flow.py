@@ -12,12 +12,12 @@ def test_goal_to_approval_to_verified_result(tmp_path,monkeypatch):
     from app import goal_tasks
     from agents import goal_worker
     store=TaskStore(tmp_path/'flow.db')
-    goal=store.create('family','child','Prepare a school-trip draft')
-    store.install_plugin('family','microsoft-family')
-    skill=SimpleNamespace(name='Draft preparation',description='Prepare a message',instructions='Create the requested draft.',required_plugin_ids=['microsoft-family'])
+    goal=store.create('family','child','Send a school-trip update')
+    store.install_plugin('family','whatsapp')
+    skill=SimpleNamespace(name='Family update',description='Send a message',instructions='Send the approved update.',required_plugin_ids=['whatsapp'])
     skill_id=store.save_skill('family',skill)
     async def plan(*args,**kwargs):
-        return GoalPlan(operations=[AssignmentPlan(action='create',key='draft',title='Prepare draft',instruction='Create the requested Outlook draft.',expected_outputs=['Saved draft'],skill_ids=[skill_id])])
+        return GoalPlan(operations=[AssignmentPlan(action='create',key='message',title='Send update',instruction='Send the requested WhatsApp update.',expected_outputs=['Sent message'],skill_ids=[skill_id])])
     monkeypatch.setattr(goal_tasks,'plan_goal',plan)
     calls=[]
     class Plugins:
@@ -25,11 +25,11 @@ def test_goal_to_approval_to_verified_result(tmp_path,monkeypatch):
             self.loaded={}
             self.family_id='family'
         async def load(self,identity):
-            self.loaded[identity]=[{'name':'create_draft','requires_approval':True}]
+            self.loaded[identity]=[{'name':'send_text','requires_approval':True}]
             return self.loaded[identity]
         async def call(self,identity,name,arguments,call_id):
             calls.append(arguments)
-            return {'status':'success','data':{'id':'draft-proof-1','isDraft':True}}
+            return {'status':'success','data':{'messages':[{'id':'message-proof-1'}]}}
         async def close(self):
             pass
     monkeypatch.setattr(goal_tasks,'PluginToolSession',Plugins)
@@ -37,14 +37,14 @@ def test_goal_to_approval_to_verified_result(tmp_path,monkeypatch):
         def __init__(self,**kwargs):
             self.tools={item.tool_name:item for item in kwargs['tools']}
         async def stream_async(self,prompt):
-            await self.tools['update_progress']('Checked the school-trip request', 30, 'Prepare the draft', 'checking')
+            await self.tools['update_progress']('Checked the school-trip request', 30, 'Prepare the update', 'checking')
             yield {}
-            await self.tools['load_goal_tools'](['microsoft-family'])
+            await self.tools['load_goal_tools'](['whatsapp'])
             yield {}
-            result=await self.tools['call_plugin']('microsoft-family','create_draft',{'subject':'School trip','body':'Please review supplies.'})
+            result=await self.tools['call_plugin']('whatsapp','send_text',{'to':'254700000000','text':'Please review the school-trip supplies.'})
             yield {}
             if result['status']=='success':
-                self.tools['complete_assignment']('Draft saved','Observed draft ID draft-proof-1',[{'name':'Saved draft','evidence':'Outlook returned draft-proof-1 with isDraft=true'}])
+                self.tools['complete_assignment']('Update sent','Observed provider message ID message-proof-1',[{'name':'Sent message','evidence':'WhatsApp returned message-proof-1'}])
                 yield {}
     monkeypatch.setattr(goal_worker,'Agent',Agent)
     monkeypatch.setattr(goal_worker,'BedrockModel',lambda **kwargs:None)
@@ -60,7 +60,7 @@ def test_goal_to_approval_to_verified_result(tmp_path,monkeypatch):
         assert updates[0]['summary'] == 'Checked the school-trip request'
         assert updates[0]['evidence']['assignment_id'] == blocked['assignments'][0]['id']
         question=blocked['questions'][0]
-        assert question['action']['arguments']['subject']=='School trip'
+        assert question['action']['arguments']['to']=='254700000000'
         assignment_id=blocked['assignments'][0]['id']
         store.answer_question('family',goal['id'],question['id'],'Approved',True)
         await manager._orchestrate('family',goal['id'])
@@ -70,7 +70,7 @@ def test_goal_to_approval_to_verified_result(tmp_path,monkeypatch):
         assert len(calls)==1
         assert final['questions'][0]['state']=='consumed'
         assert any(event['kind']=='tool_result' for event in final['activities'])
-        assert final['assignments'][0]['evidence']['outputs'][0]['name']=='Saved draft'
+        assert final['assignments'][0]['evidence']['outputs'][0]['name']=='Sent message'
         assert not queue.empty()
         assert other_queue.empty()
         assert TaskStore(store.path).get('family', goal['id'])['activities'] == final['activities']

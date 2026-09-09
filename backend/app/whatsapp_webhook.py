@@ -14,7 +14,7 @@ router=APIRouter()
 
 @router.get('/api/webhooks/whatsapp')
 def verify(request: Request):
-    expected=setting('MOM_LIFE_WHATSAPP_VERIFY_TOKEN')
+    expected=setting('MOM_LIFE_PLUGIN_WHATSAPP_VERIFY_TOKEN')
     supplied=request.query_params.get('hub.verify_token','')
     if not expected or request.query_params.get('hub.mode')!='subscribe' or not hmac.compare_digest(expected,supplied):
         raise HTTPException(403,'Invalid webhook verification.')
@@ -23,7 +23,7 @@ def verify(request: Request):
 
 @router.post('/api/webhooks/whatsapp')
 async def receive(request: Request):
-    secret=setting('MOM_LIFE_WHATSAPP_APP_SECRET')
+    secret=setting('MOM_LIFE_PLUGIN_WHATSAPP_APP_SECRET')
     if not secret:
         raise HTTPException(503,'WhatsApp webhook is not configured.')
     body=await request.body()

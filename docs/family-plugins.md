@@ -27,17 +27,8 @@ MCP methods with no application-defined read contract require approval of the ex
 | Google Maps | `https://mapstools.googleapis.com/mcp` | A restricted mom.life server key is supplied through `X-Goog-Api-Key`. Families can add the capability without sharing the credential. Grounding Lite provides place search, weather, and routes; it does not expose a child's live location or Google location sharing. |
 | Notion | `https://mcp.notion.com/mcp` | OAuth with dynamic client registration; only the selected workspace and the user's existing access. |
 | Canva | `https://mcp.canva.com/mcp` | Per-user OAuth with dynamic client registration. The server's exact tools are discovered at run time and consequential calls still require assignment approval. |
-| Home Assistant | Operator-configured HTTPS URL ending in `/api/mcp` | Instance authorization and explicitly exposed entities. No unrestricted home-device access is implied. |
 
-Sources: [Workspace MCP configuration](https://developers.google.com/workspace/guides/configure-mcp-servers), [Todoist developer documentation](https://developer.todoist.com/api/v1/), [Instacart MCP](https://docs.instacart.com/developer_platform_api/guide/tutorials/mcp/), [Maps Grounding Lite](https://developers.google.com/maps/ai/grounding-lite), [Notion connection guide](https://developers.notion.com/guides/mcp/get-started-with-mcp), [Canva MCP](https://www.canva.dev/docs/mcp/), [Home Assistant MCP](https://www.home-assistant.io/integrations/mcp_server).
-
-## Microsoft family adapter
-
-Implemented in `api_adapters.py` using Microsoft Graph v1.0. `list_events`, `list_messages`, and `list_task_lists` address the signed-in user; `create_draft` creates a plain-text Outlook draft without sending it. No arbitrary URL/method passthrough exists. OAuth is delegated, supporting applicable personal Microsoft accounts. Request only the permissions actually needed: `Calendars.Read`, `Mail.Read`, `Tasks.Read`, and `Mail.ReadWrite` for drafts. Validate uses the To Do lists read endpoint, so this configured subset needs `Tasks.Read`.
-
-A future separately scoped capability can extend this adapter with event/task creation. Do not mistake Microsoft Family Safety device controls for these Graph mail/calendar/task APIs. No suitable official family-wide MCP surface was established in this research; the implementation uses the documented Graph API directly.
-
-Sources: [Outlook mail API](https://learn.microsoft.com/en-us/graph/api/resources/mail-api-overview?view=graph-rest-1.0), [Graph permissions](https://learn.microsoft.com/en-us/graph/permissions-reference).
+Sources: [Workspace MCP configuration](https://developers.google.com/workspace/guides/configure-mcp-servers), [Todoist developer documentation](https://developer.todoist.com/api/v1/), [Instacart MCP](https://docs.instacart.com/developer_platform_api/guide/tutorials/mcp/), [Maps Grounding Lite](https://developers.google.com/maps/ai/grounding-lite), [Notion connection guide](https://developers.notion.com/guides/mcp/get-started-with-mcp), [Canva MCP](https://www.canva.dev/docs/mcp/).
 
 ## Education adapter
 
@@ -49,37 +40,23 @@ Source: [Google Classroom API overview](https://developers.google.com/workspace/
 
 Fitbit exposes read-only profile, dated activity, and dated sleep tools through its Web API. Withings exposes measurements, dated activity, and dated sleep through its Health Data API; Withings also provides a demo user for integration testing. Both adapters require the profile owner to authorize access and are health-tracking inputs, not clinical diagnosis or treatment tools.
 
-Apple Health and Android Health Connect appear in the directory as companion-app integrations, not web connections. Both stores live on the user's device and require native platform code plus explicit permission for each health-data category. Their Add controls remain unavailable until mom.life has the corresponding iOS or Android companion.
+Apple Health is a companion connection because HealthKit data remains on the iPhone and has no server-side account API. After the signed-in mom.life iPhone companion receives per-category HealthKit permission, it pushes anchored changes and deletions to `/api/plugins/apple-health/sync`. The backend normalizes only steps, active energy, walking or running distance, heart rate, and sleep stages. The worker runtime exposes `read_daily_activity`, `read_sleep`, `read_heart_rate`, and `latest_sync` as bounded tools. It does not poll HealthKit, fabricate samples, or mark the connection valid before a real sample is synchronized.
 
-Sources: [Fitbit Web API](https://dev.fitbit.com/build/reference/web-api/explore/), [Withings OAuth flow](https://developer.withings.com/developer-guide/v3/integration-guide/public-health-data-api/get-access/oauth-web-flow/), [Apple HealthKit authorization](https://developer.apple.com/documentation/HealthKit/authorizing-access-to-health-data), [Android Health Connect data types](https://developer.android.com/health-and-fitness/health-connect/data-types).
+Sources: [Fitbit Web API](https://dev.fitbit.com/build/reference/web-api/explore/), [Withings OAuth flow](https://developer.withings.com/developer-guide/v3/integration-guide/public-health-data-api/get-access/oauth-web-flow/), [Apple HealthKit authorization](https://developer.apple.com/documentation/HealthKit/authorizing-access-to-health-data), [HealthKit anchored queries](https://developer.apple.com/documentation/healthkit/executing-anchored-object-queries).
 
 ## Alexa boundary
 
-Alexa's public developer surface is designed for building skills and controlling cloud-connected devices; it is not a general API for reading a family's Alexa history or Amazon household account. mom.life therefore does not show a misleading Alexa data plugin. Home Assistant remains the practical smart-home connection, and a later mom.life Alexa skill can expose selected agent actions to voice without treating Alexa as an unrestricted data source.
+Alexa's public developer surface is designed for building skills and controlling cloud-connected devices; it is not a general API for reading a family's Alexa history or Amazon household account. mom.life therefore does not show a misleading Alexa data plugin. A later mom.life Alexa skill can expose selected agent actions to voice without treating Alexa as an unrestricted data source.
 
 Source: [Alexa Smart Home Skills](https://developer.amazon.com/en-US/alexa/alexa-skills-kit/get-deeper/smart-home-skills).
 
 ## WhatsApp Business adapter
 
-Implemented `send_text` calls the configured business phone's Graph `/messages` resource. It requires `WHATSAPP_PHONE_NUMBER_ID`, `WHATSAPP_API_VERSION`, authorized token, and family binding (all with the `MOM_LIFE_PLUGIN_` prefix). The worker approval gate binds the exact recipient and text. This is business messaging, not access to Mom's personal WhatsApp history or groups. Business policy, customer-service windows, and template rules remain provider-enforced. A provider response accepting a message is not delivery evidence.
+Implemented `send_text` calls the configured business phone's Graph `/messages` resource. It requires `WHATSAPP_PHONE_NUMBER_ID`, `WHATSAPP_API_VERSION`, authorized token, family binding, `WHATSAPP_VERIFY_TOKEN`, and `WHATSAPP_APP_SECRET` (all with the `MOM_LIFE_PLUGIN_` prefix). The worker approval gate binds the exact recipient and text. This is business messaging, not access to Mom's personal WhatsApp history or groups. Business policy, customer-service windows, and template rules remain provider-enforced. A provider response accepting a message is not delivery evidence.
 
 Incoming message integration contract: Meta webhook verification challenge, signature verification over the raw payload using the app secret, deduplication by message ID, business-phone-to-family binding, and a persisted message event. Only an explicitly subscribed assignment should resume from that event. An HTTP arrival must never become a fabricated user instruction. The validation probe reads the configured business phone identity; it never sends a test message. Incoming webhook onboarding remains a separate integration requirement.
 
 Source: [Meta-maintained business messaging sample and permissions](https://github.com/fbsamples/business-messaging-sample-tech-provider-app/blob/main/README.md), [Meta webhook reference collection](https://www.postman.com/meta/whatsapp-business-platform/folder/tduohwq/webhook-payload-reference).
-
-## MyChart / SMART on FHIR adapter
-
-Implemented read-only `read_patient`, `read_observations`, and `read_care_plans`. Configure `MYCHART_URL` to the provider FHIR R4 base and `MYCHART_PATIENT_ID` to the patient returned by authorization, plus token and family binding. The agent cannot supply or override the patient ID. Provider/proxy authorization is required separately for each child; this local configuration binds one authorized patient, not all children. No prescribing, diagnosis, treatment changes, or appointment booking is exposed.
-
-SMART discovery and authorization must be completed through the participating provider. Child access cannot be inferred from a parent's login. The adapter is an API tool source in the same registry; a separate MCP server is unnecessary for internal worker use.
-
-Sources: [Epic FHIR interfaces and SMART support](https://open.epic.com/interface/FHIR), [Epic provider endpoints](https://open.epic.com/MyApps/Endpoints).
-
-## Amazon shopping adapter
-
-Implemented `get_product` using Creators API `POST https://creatorsapi.amazon/catalog/v1/getItems`, a known ASIN, server-configured marketplace and partner tag. Configure `AMAZON_SHOPPING_MARKETPLACE`, `AMAZON_SHOPPING_PARTNER_TAG`, authorized Creators API token, and family binding. Token acquisition uses the region-appropriate Login with Amazon OAuth client-credentials endpoint. No consumer orders, account scraping, cart, checkout, or payment tools exist. Connection validation uses the operator-configured `AMAZON_SHOPPING_VALIDATION_ASIN` and requires a returned product; it never invents a test ASIN.
-
-Sources: [Creators API purpose](https://affiliate-program.amazon.com/creatorsapi/docs/en-us/introduction), [Creators API authentication and GetItems contract](https://affiliate-program.amazon.com/creatorsapi/docs/en-us/get-started/using-curl).
 
 ## Browser adapter boundary
 
