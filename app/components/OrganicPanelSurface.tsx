@@ -6,13 +6,14 @@ const focusedPath = "M88 0 C258 0 386 12 556 12 C726 12 854 0 1024 0 C1073 0 111
 
 export function OrganicPanelSurface({ mode }: { mode: PanelMode }) {
   const path = mode === "home" ? homePath : focusedPath;
+  const light = mode === "plugins";
   return (
     <svg className={styles.surface} viewBox="0 0 1112 718" preserveAspectRatio="none" aria-hidden="true">
       <defs>
         <linearGradient id="panel-fill" x1="0" y1="0" x2="1" y2="1">
-          <stop offset="0" stopColor="#fffaf4" stopOpacity=".9" />
-          <stop offset=".55" stopColor="#fff7ef" stopOpacity=".81" />
-          <stop offset="1" stopColor="#fcefe8" stopOpacity=".86" />
+          <stop offset="0" stopColor={light ? "#fff" : "#fffaf4"} stopOpacity={light ? ".97" : ".9"} />
+          <stop offset=".55" stopColor={light ? "#fffdfa" : "#fff7ef"} stopOpacity={light ? ".95" : ".81"} />
+          <stop offset="1" stopColor={light ? "#fffaf7" : "#fcefe8"} stopOpacity={light ? ".96" : ".86"} />
         </linearGradient>
         <filter id="panel-shadow" x="-15%" y="-15%" width="130%" height="140%">
           <feDropShadow dx="0" dy="19" stdDeviation="18" floodColor="#775144" floodOpacity=".13" />

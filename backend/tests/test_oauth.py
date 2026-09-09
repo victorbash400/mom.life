@@ -1,4 +1,5 @@
 import asyncio
+import base64
 import json
 from urllib.parse import urlsplit,parse_qs
 
@@ -81,3 +82,13 @@ def test_refresh_rotates_token_and_does_not_resurrect_removed_connection(tmp_pat
     with pytest.raises(ValueError,match='changed during refresh'):
         asyncio.run(oauth.access_token('family','todoist'))
     assert oauth.token('family','todoist') is None
+
+
+def test_connected_identity_comes_from_provider_id_token(tmp_path,monkeypatch):
+    claims=base64.urlsafe_b64encode(json.dumps({'email':'sarah@example.com','name':'Sarah','picture':'https://images.example/sarah.jpg'}).encode()).decode().rstrip('=')
+    def handler(request):
+        return httpx.Response(200,json={'access_token':'private-provider-token','id_token':f'header.{claims}.signature','token_type':'Bearer','expires_in':3600})
+    store,oauth=configured(tmp_path,monkeypatch,handler)
+    state=parse_qs(urlsplit(oauth.begin('family','todoist')['authorization_url']).query)['state'][0]
+    asyncio.run(oauth.finish(state,'provider-code'))
+    assert oauth.identity('family','todoist') == {'email':'sarah@example.com','name':'Sarah','picture':'https://images.example/sarah.jpg'}

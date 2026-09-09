@@ -1,6 +1,6 @@
 # Family plugin adapters
 
-Verified against provider documentation on September 5, 2026. The directory describes provider capabilities; installing a plugin does not claim that credentials, provider approval, or live access exist.
+Verified against provider documentation on September 9, 2026. The directory describes provider capabilities; installing a plugin does not claim that credentials, provider approval, or live access exist.
 
 ## Runtime contract
 
@@ -10,13 +10,15 @@ Credentials are server-side environment variables or `backend/.env`. Each connec
 
 The UI's Install action persists installation. Check connection performs actual MCP discovery or a read-only API probe and records when that succeeded. Authorize starts the registered OAuth client flow using PKCE S256 and a one-use state. The callback exchanges the authorization code and encrypts family-bound tokens in SQLite. Provider registration must be configured beforehand. Expired tokens fail visibly and require renewed authorization. The app does not silently switch providers. A previously validated timestamp is evidence of that check, not a promise that access can never expire.
 
+Google Workspace is presented as one connected account with separate Gmail, Drive, Docs, and Calendar service switches. Each switch controls its matching namespace. When Google returns OpenID identity claims, the account row uses the connected user's name, email, and profile image.
+
 MCP methods with no application-defined read contract require approval of the exact namespace, tool name, and arguments. The approval is bound to one assignment and consumed once, before dispatch. API adapters expose bounded read operations and explicitly identify writes. A disabled coarse permission stops use of that provider rather than guessing which arbitrary third-party method it covers. Removing a plugin revokes access on the next tool call.
 
 ## Official MCP connections
 
 | Plugin | Adapter / endpoint | Authorization and limits |
 | --- | --- | --- |
-| Google Workspace | `workspace.gmail`, `workspace.drive`, `workspace.docs`, `workspace.calendar` use their respective `https://<product>mcp.googleapis.com/mcp/v1` endpoints | Workspace Developer Preview, enabled MCP APIs, OAuth scopes for each product. Shared `GOOGLE_WORKSPACE_TOKEN` and `GOOGLE_WORKSPACE_FAMILY_ID`; optional `WORKSPACE_GMAIL_URL`, etc. overrides. Validate checks all four namespaces. |
+| Google Workspace | `workspace.gmail`, `workspace.drive`, `workspace.docs`, `workspace.calendar` use their respective `https://<product>mcp.googleapis.com/mcp/v1` endpoints | Workspace Developer Preview, enabled MCP APIs, OAuth scopes for each selected product. Shared `GOOGLE_WORKSPACE_TOKEN` and `GOOGLE_WORKSPACE_FAMILY_ID`; optional `WORKSPACE_GMAIL_URL`, etc. overrides. Validation checks only enabled service namespaces, and at least one service must remain enabled. |
 | Todoist | `https://ai.todoist.net/mcp` | Provider OAuth access token. Shared projects/tasks depend on the authorized account. |
 | Instacart | `https://mcp.instacart.com/mcp` | Developer Platform API key as bearer token. Produces shopping and recipe pages; do not imply it purchases groceries. |
 | Google Maps | `https://mapstools.googleapis.com/mcp` | Grounding Lite key supplied through `X-Goog-Api-Key`. Enable the required Google service. |
@@ -33,6 +35,26 @@ Implemented in `api_adapters.py` using Microsoft Graph v1.0. `list_events`, `lis
 A future separately scoped capability can extend this adapter with event/task creation. Do not mistake Microsoft Family Safety device controls for these Graph mail/calendar/task APIs. No suitable official family-wide MCP surface was established in this research; the implementation uses the documented Graph API directly.
 
 Sources: [Outlook mail API](https://learn.microsoft.com/en-us/graph/api/resources/mail-api-overview?view=graph-rest-1.0), [Graph permissions](https://learn.microsoft.com/en-us/graph/permissions-reference).
+
+## Education adapter
+
+Google Classroom exposes read-only `list_courses`, `list_coursework`, and `list_announcements` tools through the official Classroom REST API. The signed-in Google Workspace for Education user and the school's licensing and permissions determine what is visible. A guardian relationship can provide summaries but does not silently grant the parent student-level API access. Configure a registered Google OAuth client with the narrow Classroom read scopes required by these tools.
+
+Source: [Google Classroom API overview](https://developers.google.com/workspace/classroom/guides/get-started), [Classroom users and guardians](https://developers.google.com/workspace/classroom/guides/key-concepts/user-types).
+
+## Health and activity adapters
+
+Fitbit exposes read-only profile, dated activity, and dated sleep tools through its Web API. Withings exposes measurements, dated activity, and dated sleep through its Health Data API; Withings also provides a demo user for integration testing. Both adapters require the profile owner to authorize access and are health-tracking inputs, not clinical diagnosis or treatment tools.
+
+Apple Health and Android Health Connect appear in the directory as companion-app integrations, not web connections. Both stores live on the user's device and require native platform code plus explicit permission for each health-data category. Their Add controls remain unavailable until mom.life has the corresponding iOS or Android companion.
+
+Sources: [Fitbit Web API](https://dev.fitbit.com/build/reference/web-api/explore/), [Withings OAuth flow](https://developer.withings.com/developer-guide/v3/integration-guide/public-health-data-api/get-access/oauth-web-flow/), [Apple HealthKit authorization](https://developer.apple.com/documentation/HealthKit/authorizing-access-to-health-data), [Android Health Connect data types](https://developer.android.com/health-and-fitness/health-connect/data-types).
+
+## Alexa boundary
+
+Alexa's public developer surface is designed for building skills and controlling cloud-connected devices; it is not a general API for reading a family's Alexa history or Amazon household account. mom.life therefore does not show a misleading Alexa data plugin. Home Assistant remains the practical smart-home connection, and a later mom.life Alexa skill can expose selected agent actions to voice without treating Alexa as an unrestricted data source.
+
+Source: [Alexa Smart Home Skills](https://developer.amazon.com/en-US/alexa/alexa-skills-kit/get-deeper/smart-home-skills).
 
 ## WhatsApp Business adapter
 

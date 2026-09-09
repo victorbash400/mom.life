@@ -5,6 +5,11 @@ WORKSPACE_ENDPOINTS = {
     'workspace.calendar':'https://calendarmcp.googleapis.com/mcp/v1',
 }
 
+WORKSPACE_PERMISSION_IDS = {
+    namespace: f'google-workspace.{index}'
+    for index, namespace in enumerate(WORKSPACE_ENDPOINTS)
+}
+
 
 def namespaces(plugin_ids):
     return [namespace for identity in plugin_ids for namespace in (WORKSPACE_ENDPOINTS if identity == 'google-workspace' else [identity])]

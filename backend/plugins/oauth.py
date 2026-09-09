@@ -1,5 +1,6 @@
 """Registered OAuth clients with PKCE and encrypted family-bound tokens."""
 import base64
+import binascii
 import hashlib
 import json
 import os
@@ -111,6 +112,23 @@ class OAuthConnections:
         if token['expires_at']<=time.time():
             raise ValueError('Provider authorization expired. Reconnect this plugin.')
         return token['access_token']
+
+    def identity(self,family_id,plugin_id):
+        with self.store._connect() as db:
+            row=db.execute('SELECT token FROM oauth_tokens WHERE family_id=? AND plugin_id=?',(family_id,plugin_id)).fetchone()
+        if not row:
+            return None
+        tokens=json.loads(self.cipher.decrypt(row['token'].encode()))
+        encoded=tokens.get('id_token')
+        if not encoded:
+            return None
+        try:
+            payload=encoded.split('.')[1]
+            payload += '=' * (-len(payload) % 4)
+            claims=json.loads(base64.urlsafe_b64decode(payload.encode()))
+        except (ValueError,IndexError,UnicodeDecodeError,binascii.Error,json.JSONDecodeError):
+            return None
+        return {key:claims.get(key) for key in ('email','name','picture') if claims.get(key)} or None
 
     async def access_token(self,family_id,plugin_id):
         from app.runtime_lock import acquire, release

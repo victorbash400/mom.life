@@ -1,17 +1,55 @@
 "use client";
-import { Search } from "lucide-react";
+
+import { ArrowLeft, Search } from "lucide-react";
 import { useDeferredValue, useMemo, useState } from "react";
+
 import { toolDirectory, toolGroups, type ToolDefinition } from "../data/toolDirectory";
-import { ConnectionDialog } from "./ConnectionDialog";
-import { PluginStoreGroup } from "./PluginStoreGroup";
-import { ToolIcon } from "./ToolIcon";
-import { WorkspaceHeader } from "./WorkspaceHeader";
 import type { useToolConnections } from "../hooks/useToolConnections";
-import { SkillsLibrary } from "./SkillsLibrary";
+import { ConnectedToolSection } from "./ConnectedToolSection";
+import { GoogleWorkspaceSection } from "./GoogleWorkspaceSection";
+import { PluginStoreGroup } from "./PluginStoreGroup";
 import styles from "./PluginStore.module.css";
-export function PluginStore({ connections, onBack }: { connections: ReturnType<typeof useToolConnections>; onBack: () => void }) {
-  const { connectedIds } = connections;
-  const [view, setView] = useState("connections");
-  const [query, setQuery] = useState(""); const [selected, setSelected] = useState<ToolDefinition>(); const deferred = useDeferredValue(query.trim().toLowerCase()); const entries = useMemo(() => toolDirectory.filter((tool) => !deferred || `${tool.name} ${tool.description}`.toLowerCase().includes(deferred)), [deferred]); const connected = toolDirectory.filter((tool) => connectedIds.includes(tool.id));
-  return <div className={styles.store}><WorkspaceHeader title="Connections" onClose={onBack} /><nav className={styles.tabs}><button type="button" aria-pressed={view === "connections"} onClick={() => setView("connections")}>Connections</button><button type="button" aria-pressed={view === "skills"} onClick={() => setView("skills")}>Skills</button></nav>{view === "skills" ? <SkillsLibrary /> : <><label className={styles.search}><Search /><input aria-label="Search connections" onChange={(event) => setQuery(event.target.value)} placeholder="Search connections" type="search" value={query} /></label>{connected.length ? <section className={styles.connected}><header><strong>Connected</strong><small>{connected.length}</small></header><div>{connected.map((tool) => <button aria-label={`Manage ${tool.name}`} key={tool.id} onClick={() => setSelected(tool)} title={`Manage ${tool.name}`} type="button"><ToolIcon tool={tool} /></button>)}</div></section> : null}<div className={styles.directory}>{toolGroups.map((group) => <PluginStoreGroup connectedIds={connectedIds} group={group} key={group} onAdd={setSelected} tools={entries.filter((tool) => tool.group === group)} />)}</div>{connections.error ? <p role="alert">{connections.error}</p> : null}<ConnectionDialog key={selected?.id} onCancel={() => setSelected(undefined)} connections={connections} tool={selected} /></>}</div>;
+
+type Connections = ReturnType<typeof useToolConnections>;
+
+export function PluginStore({ connections, onBack }: { connections: Connections; onBack: () => void }) {
+  const [view, setView] = useState<"plugins" | "directory">("plugins");
+  const [query, setQuery] = useState("");
+  const [busyId, setBusyId] = useState<string>();
+  const [actionError, setActionError] = useState<string>();
+  const deferred = useDeferredValue(query.trim().toLocaleLowerCase());
+  const states = useMemo(() => new Map(connections.states.map((state) => [state.id, state])), [connections.states]);
+  const entries = useMemo(() => toolDirectory.filter((tool) => !deferred || `${tool.name} ${tool.description}`.toLocaleLowerCase().includes(deferred)), [deferred]);
+  const workspace = entries.find((tool) => tool.id === "google-workspace" && states.get(tool.id)?.installed);
+  const installed = entries.filter((tool) => tool.id !== "google-workspace" && states.get(tool.id)?.installed);
+
+  async function run(tool: ToolDefinition, action: () => Promise<void>) {
+    setBusyId(tool.id);
+    setActionError(undefined);
+    try { await action(); }
+    catch (reason) { setActionError(reason instanceof Error ? reason.message : `Could not update ${tool.name}.`); }
+    finally { setBusyId(undefined); }
+  }
+
+  function changeView(next: "plugins" | "directory") {
+    setQuery("");
+    setActionError(undefined);
+    setView(next);
+  }
+
+  if (!connections.loaded) return <p className={styles.loading}>Loading plugins…</p>;
+
+  return <section aria-label="Plugins" className={styles.viewport}><div className={styles.store} data-view={view}>
+    <header className={styles.heading}><span><button aria-label="Back to home" className={styles.back} onClick={onBack} type="button"><ArrowLeft aria-hidden="true" /></button><h1>{view === "plugins" ? "Plugins" : "Plugin directory"}</h1></span><button className={styles.browse} onClick={() => changeView(view === "plugins" ? "directory" : "plugins")} type="button">{view === "plugins" ? "Browse directory" : "Back to plugins"}</button></header>
+    <label className={styles.search}><Search aria-hidden="true" /><input aria-label="Search plugins" onChange={(event) => setQuery(event.target.value)} placeholder="Search plugins" type="search" value={query} /></label>
+    {connections.error || actionError ? <p className={styles.error} role="alert">{actionError || connections.error}</p> : null}
+    <div className={styles.content}>{view === "plugins" ? <>
+      {workspace && states.get(workspace.id) ? <GoogleWorkspaceSection busy={busyId === workspace.id} connections={connections} onRun={(action) => run(workspace, action)} state={states.get(workspace.id)!} /> : null}
+      {installed.map((tool) => {
+        const state = states.get(tool.id);
+        return state ? <ConnectedToolSection busy={busyId === tool.id} connections={connections} key={tool.id} onRun={(action) => run(tool, action)} state={state} tool={tool} /> : null;
+      })}
+      {!installed.length && !workspace ? <p className={styles.empty}>No plugins added. Browse the directory to add one.</p> : null}
+    </> : toolGroups.map((group) => <PluginStoreGroup busyId={busyId} group={group} key={group} onAdd={(tool) => run(tool, () => connections.connect(tool.id))} states={states} tools={entries.filter((tool) => tool.group === group)} />)}</div>
+  </div></section>;
 }

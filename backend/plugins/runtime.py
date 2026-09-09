@@ -7,7 +7,7 @@ from mcp.client.streamable_http import streamablehttp_client
 from strands.tools.mcp import MCPClient
 
 from .catalog import plugin_by_id
-from .namespaces import namespaces, owner, WORKSPACE_ENDPOINTS
+from .namespaces import namespaces, owner, WORKSPACE_ENDPOINTS, WORKSPACE_PERMISSION_IDS
 
 
 class PluginToolSession:
@@ -82,11 +82,16 @@ class PluginToolSession:
         return await OAuthConnections(self.store).access_token(self.family_id,plugin_id)
 
     def require_access(self, plugin_id):
-        plugin_id = owner(plugin_id)
+        namespace = plugin_id
+        plugin_id = owner(namespace)
         if self.store:
             if plugin_id not in self.store.installed_plugins(self.family_id):
                 raise RuntimeError('The plugin has been removed from this family.')
             permissions = self.store.permissions(self.family_id, plugin_id)
+            if namespace in WORKSPACE_PERMISSION_IDS:
+                if not permissions.get(WORKSPACE_PERMISSION_IDS[namespace], True):
+                    raise RuntimeError('This Google Workspace service is disabled for the family.')
+                return
             # Coarse provider permissions cannot safely classify arbitrary MCP methods.
             if not all(permissions.get(f'{plugin_id}.{i}', True) for i in range(len(plugin_by_id(plugin_id).permissions))):
                 raise RuntimeError('This plugin has disabled permissions. Enable the required permissions before running it.')

@@ -39,6 +39,16 @@ def test_runtime_enforces_namespace_and_revoked_permissions(tmp_path):
         runtime.require_access('todoist')
 
 
+def test_workspace_permissions_are_scoped_to_each_service(tmp_path):
+    store=TaskStore(tmp_path/'workspace.db')
+    store.install_plugin('family','google-workspace')
+    store.set_permission('family','google-workspace','google-workspace.0',False)
+    runtime=PluginToolSession(['google-workspace'],store,'family')
+    with pytest.raises(RuntimeError,match='service is disabled'):
+        runtime.require_access('workspace.gmail')
+    runtime.require_access('workspace.drive')
+
+
 def test_api_credentials_are_family_scoped(monkeypatch):
     configured(monkeypatch,'microsoft-family')
     with pytest.raises(RuntimeError,match='family identity'):
@@ -138,6 +148,41 @@ def test_amazon_validation_rejects_empty_success_response(monkeypatch):
     adapter=ApiAdapter('amazon-shopping','family',httpx.MockTransport(lambda request:httpx.Response(200,json={'itemsResult':{'items':[]}})))
     with pytest.raises(ValueError,match='no product'):
         asyncio.run(adapter.validate())
+
+
+def test_google_classroom_adapter_reads_courses_and_coursework(monkeypatch):
+    configured(monkeypatch,'google-classroom')
+    def handler(request):
+        if request.url.path == '/v1/courses':
+            assert request.url.params['courseStates'] == 'ACTIVE'
+            return httpx.Response(200,json={'courses':[{'id':'math'}]})
+        assert request.url.path == '/v1/courses/math/courseWork'
+        return httpx.Response(200,json={'courseWork':[{'title':'Fractions'}]})
+    adapter=ApiAdapter('google-classroom','family',httpx.MockTransport(handler))
+    assert asyncio.run(adapter.validate())['data']['courses'][0]['id']=='math'
+    assert asyncio.run(adapter.call('list_coursework',{'course_id':'math'}))['status']=='success'
+
+
+def test_fitbit_adapter_limits_daily_reads_to_an_explicit_date(monkeypatch):
+    configured(monkeypatch,'fitbit')
+    def handler(request):
+        assert request.url.path == '/1.2/user/-/sleep/date/2026-09-09.json'
+        return httpx.Response(200,json={'sleep':[]})
+    adapter=ApiAdapter('fitbit','family',httpx.MockTransport(handler))
+    assert asyncio.run(adapter.call('read_sleep',{'date':'2026-09-09'}))['data']=={'sleep':[]}
+    with pytest.raises(ValueError,match='YYYY-MM-DD'):
+        asyncio.run(adapter.call('read_sleep',{'date':'today'}))
+
+
+def test_withings_adapter_uses_authorized_health_endpoint(monkeypatch):
+    configured(monkeypatch,'withings')
+    def handler(request):
+        assert request.method == 'POST'
+        assert request.url.path == '/measure'
+        assert 'action=getmeas' in request.content.decode()
+        return httpx.Response(200,json={'status':0,'body':{'measuregrps':[]}})
+    adapter=ApiAdapter('withings','family',httpx.MockTransport(handler))
+    assert asyncio.run(adapter.validate())['data']['status']==0
 
 
 def test_setup_status_never_exposes_secret_values(monkeypatch):

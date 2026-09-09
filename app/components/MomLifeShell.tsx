@@ -7,7 +7,6 @@ import { AppHeader } from "./AppHeader";
 import { ChildSwitcher } from "./ChildSwitcher";
 import { useFamily } from "./FamilyProvider";
 import type { ParentSettingsView } from "./ParentSettingsWorkspace";
-import { PluginQuickMenu } from "./PluginQuickMenu";
 import { useToolConnections } from "../hooks/useToolConnections";
 import { useSecurity } from "../hooks/useSecurity";
 import styles from "./MomLifeShell.module.css";
@@ -17,7 +16,6 @@ export type PanelMode = "home" | "ask" | "tasks" | "incoming" | "security" | "pl
 export function MomLifeShell() {
   const { family: { children } } = useFamily();
   const [mode, setMode] = useState<PanelMode>("home");
-  const [pluginsOpen, setPluginsOpen] = useState(false);
   const [selectedChildId, setSelectedChildId] = useState<string>();
   const [parentSettingsView, setParentSettingsView] = useState<ParentSettingsView>("profile");
   const connections = useToolConnections();
@@ -25,13 +23,14 @@ export function MomLifeShell() {
   const visibleMode = (mode === "child" || mode === "child-info") && !children.some((child) => child.id === selectedChildId) ? "home" : mode;
   const selectedChild = children.find((child) => child.id === selectedChildId);
 
-  function selectChild(id: string) { setSelectedChildId(id); setPluginsOpen(false); setMode((current) => current === "child-info" || current === "tasks" ? current : "child"); }
-  function openParent() { setSelectedChildId(undefined); setPluginsOpen(false); setMode("parent"); }
-  function openChildManagement() { setSelectedChildId(undefined); setPluginsOpen(false); setParentSettingsView("children"); setMode("parent-settings"); }
-  function openIncoming() { setSelectedChildId(undefined); setPluginsOpen(false); setMode("incoming"); }
-  function openSecurity() { setSelectedChildId(undefined); setPluginsOpen(false); setMode("security"); }
+  function selectChild(id: string) { setSelectedChildId(id); setMode((current) => current === "child-info" || current === "tasks" ? current : "child"); }
+  function openParent() { setSelectedChildId(undefined); setMode("parent"); }
+  function openChildManagement() { setSelectedChildId(undefined); setParentSettingsView("children"); setMode("parent-settings"); }
+  function openIncoming() { setSelectedChildId(undefined); setMode("incoming"); }
+  function openSecurity() { setSelectedChildId(undefined); setMode("security"); }
+  function openPlugins() { setSelectedChildId(undefined); setMode("plugins"); }
   function changeMode(next: PanelMode) { if (next === "parent-settings") setParentSettingsView("profile"); setMode(next); }
   function returnHome() { setSelectedChildId(undefined); setMode("home"); }
 
-  return <main className={styles.shell} data-mode={visibleMode}><AppHeader incomingOpen={visibleMode === "incoming"} onChildrenOpen={openChildManagement} onIncomingOpen={openIncoming} onProfileOpen={openParent} pluginsOpen={pluginsOpen} onPluginsToggle={() => setPluginsOpen((open) => !open)} onSecurityOpen={openSecurity} securityAlertCount={security.reviews.filter((review) => !review.dismissed).length} securityOpen={visibleMode === "security"} />{pluginsOpen ? <PluginQuickMenu connectedIds={connections.connectedIds} onClose={() => setPluginsOpen(false)} onDisconnect={connections.disconnect} onStore={() => { setPluginsOpen(false); setMode("plugins"); }} /> : null}<ChildSwitcher focused={mode === "child" || mode === "child-info" || (mode === "tasks" && Boolean(selectedChild))} onSelect={selectChild} selectedId={selectedChildId} /><ActionPanel child={selectedChild} connections={connections} mode={visibleMode} onModeChange={changeMode} onReturnHome={returnHome} parentSettingsView={parentSettingsView} security={security} /></main>;
+  return <main className={styles.shell} data-mode={visibleMode}><AppHeader incomingOpen={visibleMode === "incoming"} onChildrenOpen={openChildManagement} onIncomingOpen={openIncoming} onProfileOpen={openParent} pluginsOpen={visibleMode === "plugins"} onPluginsOpen={openPlugins} onSecurityOpen={openSecurity} securityAlertCount={security.reviews.filter((review) => !review.dismissed).length} securityOpen={visibleMode === "security"} /><ChildSwitcher focused={mode === "child" || mode === "child-info" || (mode === "tasks" && Boolean(selectedChild))} onSelect={selectChild} selectedId={selectedChildId} /><ActionPanel child={selectedChild} connections={connections} mode={visibleMode} onModeChange={changeMode} onReturnHome={returnHome} parentSettingsView={parentSettingsView} security={security} /></main>;
 }
