@@ -40,6 +40,12 @@ class PluginToolSession:
             self.loaded[plugin_id] = adapter.directory()
             return self.loaded[plugin_id]
         if plugin.transport != 'mcp':
+            if owner(plugin_id) == 'google-workspace':
+                from plugins.google_workspace_adapter import GoogleWorkspaceAdapter
+                adapter = GoogleWorkspaceAdapter(plugin_id,await self.oauth_token('google-workspace'))
+                self.clients[plugin_id] = adapter
+                self.loaded[plugin_id] = adapter.directory()
+                return self.loaded[plugin_id]
             from plugins.api_adapters import ApiAdapter
             adapter = ApiAdapter(plugin_id, self.family_id, token=await self.oauth_token(plugin_id))
             self.clients[plugin_id] = adapter
@@ -49,7 +55,7 @@ class PluginToolSession:
         oauth_token = await self.oauth_token(owner(plugin_id))
         token = oauth_token or setting(_env_name(owner(plugin_id), 'TOKEN'))
         family_owner = setting(_env_name(owner(plugin_id), 'FAMILY_ID'))
-        if not oauth_token and family_owner != self.family_id:
+        if plugin_id != 'google-maps' and not oauth_token and family_owner != self.family_id:
             raise RuntimeError('Configure the connection family identity before using these credentials.')
         if not url or not token:
             raise RuntimeError(f'{plugin.name} needs a server URL and authorized access token.')

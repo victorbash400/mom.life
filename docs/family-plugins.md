@@ -8,22 +8,25 @@ Verified against provider documentation on September 9, 2026. The directory desc
 
 Credentials are server-side environment variables or `backend/.env`. Each connection needs `MOM_LIFE_PLUGIN_<ID>_FAMILY_ID` matching the requesting family and `MOM_LIFE_PLUGIN_<ID>_TOKEN`. Convert hyphens to underscores and uppercase IDs. A URL override is `MOM_LIFE_PLUGIN_<ID>_URL`. Never put credentials in a goal, skill, browser storage, or frontend variable.
 
-The UI's Install action persists installation. Check connection performs actual MCP discovery or a read-only API probe and records when that succeeded. Authorize starts the registered OAuth client flow using PKCE S256 and a one-use state. The callback exchanges the authorization code and encrypts family-bound tokens in SQLite. Provider registration must be configured beforehand. Expired tokens fail visibly and require renewed authorization. The app does not silently switch providers. A previously validated timestamp is evidence of that check, not a promise that access can never expire.
+The UI's Install action persists installation. Check connection performs actual MCP discovery or a read-only API probe and records when that succeeded. Authorize starts OAuth using PKCE S256 and a one-use state. The callback exchanges the authorization code, encrypts family-bound tokens, and validates the real provider before marking the connection complete. Google uses the registered mom.life client. Todoist, Notion, and Canva use their published authorization-server metadata and dynamic client registration; those client credentials are encrypted in the connection store. Expired access tokens refresh on demand when the provider issued a refresh token. The app does not silently switch providers. A previously validated timestamp is evidence of that check, not a promise that access can never expire.
 
-Google Workspace is presented as one connected account with separate Gmail, Drive, Docs, and Calendar service switches. Each switch controls its matching namespace. When Google returns OpenID identity claims, the account row uses the connected user's name, email, and profile image.
+Google Workspace is presented as one connected account with separate Gmail, Drive, Docs, and Calendar service switches. Each switch controls its matching namespace. The OAuth callback validates every enabled service and marks the plugin connected without a second user action. When Google returns OpenID identity claims, the account row uses the connected user's name, email, and profile image.
 
 MCP methods with no application-defined read contract require approval of the exact namespace, tool name, and arguments. The approval is bound to one assignment and consumed once, before dispatch. API adapters expose bounded read operations and explicitly identify writes. A disabled coarse permission stops use of that provider rather than guessing which arbitrary third-party method it covers. Removing a plugin revokes access on the next tool call.
+
+## Google Workspace adapter
+
+`google_workspace_adapter.py` exposes bounded tools over the official Gmail, Drive, Docs, and Calendar REST APIs using the connected user's OAuth token. It supports Gmail search/read/draft creation, Drive search/metadata, Docs read/append, and Calendar event reads. Write tools remain subject to exact assignment approval. This is the immediate runtime because Google Workspace MCP remains in Developer Preview and requires separate program enrollment. The matching MCP services are enabled in the Google Cloud project so the transport can move to Google's hosted servers after that project is accepted into the preview.
 
 ## Official MCP connections
 
 | Plugin | Adapter / endpoint | Authorization and limits |
 | --- | --- | --- |
-| Google Workspace | `workspace.gmail`, `workspace.drive`, `workspace.docs`, `workspace.calendar` use their respective `https://<product>mcp.googleapis.com/mcp/v1` endpoints | Workspace Developer Preview, enabled MCP APIs, OAuth scopes for each selected product. Shared `GOOGLE_WORKSPACE_TOKEN` and `GOOGLE_WORKSPACE_FAMILY_ID`; optional `WORKSPACE_GMAIL_URL`, etc. overrides. Validation checks only enabled service namespaces, and at least one service must remain enabled. |
-| Todoist | `https://ai.todoist.net/mcp` | Provider OAuth access token. Shared projects/tasks depend on the authorized account. |
+| Todoist | `https://ai.todoist.net/mcp` | OAuth with dynamic client registration. Shared projects/tasks depend on the authorized account. |
 | Instacart | `https://mcp.instacart.com/mcp` | Developer Platform API key as bearer token. Produces shopping and recipe pages; do not imply it purchases groceries. |
-| Google Maps | `https://mapstools.googleapis.com/mcp` | Grounding Lite key supplied through `X-Goog-Api-Key`. Enable the required Google service. |
-| Notion | `https://mcp.notion.com/mcp` | OAuth; only authorized workspace content. |
-| Canva | `https://mcp.canva.com/mcp` | OAuth and applicable client onboarding. |
+| Google Maps | `https://mapstools.googleapis.com/mcp` | A restricted mom.life server key is supplied through `X-Goog-Api-Key`. Families can add the capability without sharing the credential. Grounding Lite provides place search, weather, and routes; it does not expose a child's live location or Google location sharing. |
+| Notion | `https://mcp.notion.com/mcp` | OAuth with dynamic client registration; only the selected workspace and the user's existing access. |
+| Canva | `https://mcp.canva.com/mcp` | Per-user OAuth with dynamic client registration. The server's exact tools are discovered at run time and consequential calls still require assignment approval. |
 | Home Assistant | Operator-configured HTTPS URL ending in `/api/mcp` | Instance authorization and explicitly exposed entities. No unrestricted home-device access is implied. |
 
 Sources: [Workspace MCP configuration](https://developers.google.com/workspace/guides/configure-mcp-servers), [Todoist developer documentation](https://developer.todoist.com/api/v1/), [Instacart MCP](https://docs.instacart.com/developer_platform_api/guide/tutorials/mcp/), [Maps Grounding Lite](https://developers.google.com/maps/ai/grounding-lite), [Notion connection guide](https://developers.notion.com/guides/mcp/get-started-with-mcp), [Canva MCP](https://www.canva.dev/docs/mcp/), [Home Assistant MCP](https://www.home-assistant.io/integrations/mcp_server).
@@ -38,7 +41,7 @@ Sources: [Outlook mail API](https://learn.microsoft.com/en-us/graph/api/resource
 
 ## Education adapter
 
-Google Classroom exposes read-only `list_courses`, `list_coursework`, and `list_announcements` tools through the official Classroom REST API. The signed-in Google Workspace for Education user and the school's licensing and permissions determine what is visible. A guardian relationship can provide summaries but does not silently grant the parent student-level API access. Configure a registered Google OAuth client with the narrow Classroom read scopes required by these tools.
+Google Classroom exposes read-only `list_courses`, `list_coursework`, and `list_announcements` tools through the official Classroom REST API. It reuses mom.life's registered Google OAuth client while requesting a separate, narrow set of Classroom scopes and retaining a separate family-bound token. Standard Google accounts can use Classroom; school-managed features still depend on the school's licensing and policy. A guardian relationship can provide summaries but does not silently grant the parent student-level API access.
 
 Source: [Google Classroom API overview](https://developers.google.com/workspace/classroom/guides/get-started), [Classroom users and guardians](https://developers.google.com/workspace/classroom/guides/key-concepts/user-types).
 
@@ -85,8 +88,10 @@ AgentCore Browser is listed with setup required, not connected from the mere pre
 Source: [AgentCore Browser](https://docs.aws.amazon.com/bedrock-agentcore/latest/devguide/browser-tool.html).
 
 
-## Registered OAuth client setup
+## OAuth client setup
 
-Configure `MOM_LIFE_PLUGIN_<ID>_OAUTH_AUTHORIZE_URL`, `TOKEN_URL`, `CLIENT_ID`, `REDIRECT_URI`, and `SCOPES` under the same OAuth prefix. `CLIENT_SECRET` and `RESOURCE` are optional, depending on the registered provider client. Register the exact frontend callback URL, such as `http://localhost:3000/api/oauth/callback`, with the provider. Only HTTPS provider endpoints are accepted. This is a registered-client integration, not automatic MCP dynamic client registration. Use the authorization server and resource audience documented by the actual provider; do not reuse an access token across unrelated resources.
+Google Workspace uses `MOM_LIFE_PLUGIN_GOOGLE_WORKSPACE_OAUTH_AUTHORIZE_URL`, `TOKEN_URL`, `CLIENT_ID`, `CLIENT_SECRET`, `REDIRECT_URI`, and `SCOPES`. Google Classroom reuses those client credentials but requests and stores its own Classroom authorization. Providers that do not publish dynamic registration use the equivalent `MOM_LIFE_PLUGIN_<ID>_OAUTH_` variables. Only HTTPS provider endpoints are accepted, and local HTTP callbacks are limited to loopback hosts.
+
+Todoist, Notion, and Canva publish OAuth authorization-server metadata and dynamic client registration. mom.life discovers their endpoints, registers the current callback, encrypts the returned client material, and includes the MCP resource audience during authorization and token exchange. A deployment with a different callback needs its own registration. Access tokens are never reused across plugin resources.
 
 Tokens are encrypted with a server-local key in the ignored backend data directory. Back up that key with the database. Callback state expires after ten minutes and is consumed before token exchange. Disconnect removes tokens and pending authorization attempts. Credentials refresh on demand before use, retaining a rotated refresh token when issued. No background polling is used. A rejected refresh produces a visible reconnect requirement. Concurrent refreshes use an advisory lock, and a conditional write prevents removed or replaced authorization from being restored.

@@ -7,6 +7,7 @@ import pytest
 from app.task_store import TaskStore
 from app.plugin_service import PluginService
 from plugins.api_adapters import ApiAdapter
+from plugins.google_workspace_adapter import GoogleWorkspaceAdapter
 from plugins.runtime import PluginToolSession
 
 
@@ -39,6 +40,16 @@ def test_runtime_enforces_namespace_and_revoked_permissions(tmp_path):
         runtime.require_access('todoist')
 
 
+def test_google_maps_uses_server_key_without_family_binding(tmp_path,monkeypatch):
+    monkeypatch.setenv('MOM_LIFE_PLUGIN_GOOGLE_MAPS_TOKEN','maps-key')
+    store=TaskStore(tmp_path/'maps.db')
+    store.install_plugin('family','google-maps')
+    runtime=PluginToolSession(['google-maps'],store,'family')
+    assert PluginService.setup_fields('google-maps') == [
+        {'name':'MOM_LIFE_PLUGIN_GOOGLE_MAPS_TOKEN','configured':True},
+    ]
+
+
 def test_workspace_permissions_are_scoped_to_each_service(tmp_path):
     store=TaskStore(tmp_path/'workspace.db')
     store.install_plugin('family','google-workspace')
@@ -47,6 +58,28 @@ def test_workspace_permissions_are_scoped_to_each_service(tmp_path):
     with pytest.raises(RuntimeError,match='service is disabled'):
         runtime.require_access('workspace.gmail')
     runtime.require_access('workspace.drive')
+
+
+def test_google_workspace_adapter_keeps_services_bounded():
+    requests=[]
+    def handler(request):
+        requests.append(request)
+        if request.url.path.endswith('/profile'):
+            return httpx.Response(200,json={'emailAddress':'parent@example.com'})
+        if request.url.path.endswith('/drafts'):
+            body=json.loads(request.content)
+            assert body['message']['raw']
+            return httpx.Response(200,json={'id':'draft-1'})
+        return httpx.Response(200,json={'files':[]})
+    transport=httpx.MockTransport(handler)
+    gmail=GoogleWorkspaceAdapter('workspace.gmail','google-token',transport)
+    drive=GoogleWorkspaceAdapter('workspace.drive','google-token',transport)
+    assert asyncio.run(gmail.validate())['status']=='success'
+    assert asyncio.run(gmail.call('create_draft',{'to':'school@example.com','subject':'Trip','body':'Please review'}))['data']['id']=='draft-1'
+    assert asyncio.run(drive.call('search_files',{'query':"Noah's report"}))['data']=={'files':[]}
+    assert all(request.headers['authorization']=='Bearer google-token' for request in requests)
+    with pytest.raises(ValueError,match='Unknown Google Workspace'):
+        asyncio.run(gmail.call('send_message',{}))
 
 
 def test_api_credentials_are_family_scoped(monkeypatch):
@@ -186,11 +219,17 @@ def test_withings_adapter_uses_authorized_health_endpoint(monkeypatch):
 
 
 def test_setup_status_never_exposes_secret_values(monkeypatch):
-    configured(monkeypatch,'todoist')
-    fields=PluginService.setup_fields('todoist')
+    configured(monkeypatch,'instacart')
+    fields=PluginService.setup_fields('instacart')
     assert all(set(field)=={'name','configured'} for field in fields)
     assert 'test-token' not in json.dumps(fields)
     assert next(field for field in fields if field['name'].endswith('_TOKEN'))['configured']
+
+
+def test_self_registering_oauth_plugins_do_not_report_server_secret_fields():
+    assert PluginService.setup_fields('todoist') == []
+    assert PluginService.setup_fields('notion') == []
+    assert PluginService.setup_fields('canva') == []
 
 
 def test_browser_preserves_approval_session_and_reuses_it(tmp_path,monkeypatch):

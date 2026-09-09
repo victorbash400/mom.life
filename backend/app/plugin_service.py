@@ -14,16 +14,15 @@ class PluginService:
         installed = self.store.installed_plugins(family_id)
         with self.store._connect() as db:
             validated = {row['plugin_id']:row['validated_at'] for row in db.execute('SELECT * FROM plugin_connections WHERE family_id=?',(family_id,))}
-        workspace_identity = None
-        if 'google-workspace' in installed:
-            from plugins.oauth import OAuthConnections
-            workspace_identity = OAuthConnections(self.store).identity(family_id,'google-workspace')
+        from plugins.oauth import OAuthConnections
+        oauth = OAuthConnections(self.store)
+        identities = {plugin_id:oauth.identity(family_id,plugin_id) for plugin_id in installed}
         return [{**plugin_snapshot(plugin,plugin.id in installed,self.store.permissions(family_id,plugin.id)),
                  'connected':plugin.id in installed and plugin.id in validated,
                  'validated_at':validated.get(plugin.id),
-                 'account_label': workspace_identity.get('email') if plugin.id == 'google-workspace' and workspace_identity else None,
-                 'account_name': workspace_identity.get('name') if plugin.id == 'google-workspace' and workspace_identity else None,
-                 'account_picture': workspace_identity.get('picture') if plugin.id == 'google-workspace' and workspace_identity else None,
+                 'account_label': (identities.get(plugin.id) or {}).get('email'),
+                 'account_name': (identities.get(plugin.id) or {}).get('name'),
+                 'account_picture': (identities.get(plugin.id) or {}).get('picture'),
                  'setup_fields': self.setup_fields(plugin.id)} for plugin in PLUGINS]
 
     async def validate(self, family_id, plugin_id):
@@ -41,7 +40,10 @@ class PluginService:
                 raise ValueError('Enable at least one Google Workspace service before connecting.')
             for namespace in enabled_namespaces:
                 directory.extend(await session.load(namespace))
-            if plugin_id in {'microsoft-family','mychart','amazon-shopping','whatsapp','google-classroom','fitbit','withings'}:
+            if plugin_id == 'google-workspace':
+                for namespace in enabled_namespaces:
+                    await session.clients[namespace].validate()
+            elif plugin_id in {'microsoft-family','mychart','amazon-shopping','whatsapp','google-classroom','fitbit','withings'}:
                 await session.clients[plugin_id].validate()
             elif plugin_id == 'agentcore-browser':
                 await session.clients[plugin_id].validate()
@@ -55,12 +57,20 @@ class PluginService:
     @staticmethod
     def setup_fields(plugin_id):
         prefix = 'MOM_LIFE_PLUGIN_' + plugin_id.replace('-','_').upper()
+        if plugin_id in {'google-workspace','google-classroom','todoist','notion','canva','apple-health','health-connect'}:
+            return []
+        if plugin_id == 'google-maps':
+            return [{'name':prefix+'_TOKEN','configured':bool(setting(prefix+'_TOKEN'))}]
+        if plugin_id in {'microsoft-family','fitbit','withings','mychart'}:
+            names = [prefix+'_OAUTH_CLIENT_ID',prefix+'_OAUTH_REDIRECT_URI']
+            if plugin_id == 'mychart':
+                names.extend([prefix+'_URL',prefix+'_PATIENT_ID'])
+            return [{'name':name,'configured':bool(setting(name))} for name in names]
         suffixes = ['FAMILY_ID']
-        if plugin_by_id(plugin_id).transport not in {'agentcore','companion'}:
+        if plugin_id != 'agentcore-browser':
             suffixes.append('TOKEN')
         extra = {
             'home-assistant':['URL'],
-            'mychart':['URL','PATIENT_ID'],
             'whatsapp':['PHONE_NUMBER_ID','API_VERSION'],
             'amazon-shopping':['MARKETPLACE','PARTNER_TAG','VALIDATION_ASIN'],
         }

@@ -1,4 +1,5 @@
 from fastapi import APIRouter, HTTPException
+import httpx
 from pydantic import BaseModel, Field
 
 from plugins.oauth import OAuthConnections
@@ -12,11 +13,11 @@ class Callback(BaseModel):
 
 
 @router.post('/api/plugins/{plugin_id}/authorize')
-def authorize(plugin_id: str,family_id: str):
+async def authorize(plugin_id: str,family_id: str):
     from app.main import task_store
     try:
-        return OAuthConnections(task_store).begin(family_id,plugin_id)
-    except ValueError as error:
+        return await OAuthConnections(task_store).begin(family_id,plugin_id)
+    except (ValueError,httpx.HTTPError) as error:
         raise HTTPException(400,str(error)) from error
 
 
@@ -24,6 +25,10 @@ def authorize(plugin_id: str,family_id: str):
 async def callback(body: Callback):
     from app.main import task_store
     try:
-        return await OAuthConnections(task_store).finish(body.state,body.code)
-    except ValueError as error:
+        result = await OAuthConnections(task_store).finish(body.state,body.code)
+        from app.plugin_service import PluginService
+        await PluginService(task_store).validate(result['family_id'],result['plugin_id'])
+        result['status'] = 'connected'
+        return result
+    except (ValueError,RuntimeError,httpx.HTTPError) as error:
         raise HTTPException(400,str(error)) from error

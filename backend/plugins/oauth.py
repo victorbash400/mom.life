@@ -15,6 +15,54 @@ from plugins.configuration import setting
 from plugins.catalog import plugin_by_id
 
 
+GOOGLE_WORKSPACE_SCOPES = {
+    'openid',
+    'email',
+    'profile',
+    'https://www.googleapis.com/auth/gmail.readonly',
+    'https://www.googleapis.com/auth/gmail.compose',
+    'https://www.googleapis.com/auth/drive.readonly',
+    'https://www.googleapis.com/auth/drive.file',
+    'https://www.googleapis.com/auth/documents.readonly',
+    'https://www.googleapis.com/auth/documents',
+    'https://www.googleapis.com/auth/calendar.calendarlist.readonly',
+    'https://www.googleapis.com/auth/calendar.events.freebusy',
+    'https://www.googleapis.com/auth/calendar.events.readonly',
+}
+
+GOOGLE_CLASSROOM_SCOPES = {
+    'openid',
+    'email',
+    'profile',
+    'https://www.googleapis.com/auth/classroom.courses.readonly',
+    'https://www.googleapis.com/auth/classroom.coursework.me.readonly',
+    'https://www.googleapis.com/auth/classroom.announcements.readonly',
+}
+
+GOOGLE_PLUGINS = {'google-workspace', 'google-classroom'}
+
+DYNAMIC_OAUTH_PROVIDERS = {
+    'todoist': {
+        'metadata_url':'https://todoist.com/.well-known/oauth-authorization-server',
+        'resource':'https://ai.todoist.net/mcp',
+        'scopes':'data:read_write',
+        'token_endpoint_auth_method':'client_secret_post',
+    },
+    'notion': {
+        'metadata_url':'https://mcp.notion.com/.well-known/oauth-authorization-server',
+        'resource':'https://mcp.notion.com/mcp',
+        'scopes':'default',
+        'token_endpoint_auth_method':'none',
+    },
+    'canva': {
+        'metadata_url':'https://mcp.canva.com/.well-known/oauth-authorization-server',
+        'resource':'https://mcp.canva.com/mcp',
+        'scopes':'profile:read design:meta:read design:content:read design:content:write folder:read folder:write asset:read asset:write',
+        'token_endpoint_auth_method':'client_secret_post',
+    },
+}
+
+
 class OAuthConnections:
     def __init__(self,store,transport=None):
         self.store=store
@@ -38,13 +86,25 @@ class OAuthConnections:
                     family_id TEXT NOT NULL, plugin_id TEXT NOT NULL, token TEXT NOT NULL,
                     PRIMARY KEY(family_id,plugin_id)
                 );
+                CREATE TABLE IF NOT EXISTS oauth_clients (
+                    plugin_id TEXT PRIMARY KEY, config TEXT NOT NULL
+                );
             ''')
 
-    @staticmethod
-    def config(plugin_id):
+    def config(self,plugin_id):
         plugin_by_id(plugin_id)
         prefix='MOM_LIFE_PLUGIN_'+plugin_id.replace('-','_').upper()+'_OAUTH_'
         config={name.lower():setting(prefix+name) for name in ['AUTHORIZE_URL','TOKEN_URL','CLIENT_ID','CLIENT_SECRET','REDIRECT_URI','SCOPES','RESOURCE']}
+        if plugin_id == 'google-classroom':
+            workspace_prefix='MOM_LIFE_PLUGIN_GOOGLE_WORKSPACE_OAUTH_'
+            for name in ['AUTHORIZE_URL','TOKEN_URL','CLIENT_ID','CLIENT_SECRET','REDIRECT_URI']:
+                config[name.lower()] = config[name.lower()] or setting(workspace_prefix+name)
+            config['scopes'] = config['scopes'] or ' '.join(sorted(GOOGLE_CLASSROOM_SCOPES))
+        if not all(config[name] for name in ['authorize_url','token_url','client_id','redirect_uri','scopes']):
+            with self.store._connect() as db:
+                registered=db.execute('SELECT config FROM oauth_clients WHERE plugin_id=?',(plugin_id,)).fetchone()
+            if registered:
+                config=json.loads(self.cipher.decrypt(registered['config'].encode()))
         for name in ['authorize_url','token_url','client_id','redirect_uri','scopes']:
             if not config[name]:
                 raise ValueError(f'Configure {prefix+name.upper()} for this registered OAuth client.')
@@ -55,11 +115,65 @@ class OAuthConnections:
         redirect=urlsplit(config['redirect_uri'])
         if redirect.scheme!='https' and not (redirect.scheme=='http' and redirect.hostname in {'localhost','127.0.0.1'}):
             raise ValueError('OAuth callback must use HTTPS or local loopback HTTP.')
+        if plugin_id == 'google-workspace' and not GOOGLE_WORKSPACE_SCOPES.issubset(config['scopes'].split()):
+            raise ValueError('Configure every required Google Workspace OAuth scope.')
+        if plugin_id == 'google-classroom' and not GOOGLE_CLASSROOM_SCOPES.issubset(config['scopes'].split()):
+            raise ValueError('Configure every required Google Classroom read-only OAuth scope.')
         return config
 
-    def begin(self,family_id,plugin_id):
+    async def register_dynamic_client(self,plugin_id):
+        provider=DYNAMIC_OAUTH_PROVIDERS.get(plugin_id)
+        if not provider:
+            return
+        with self.store._connect() as db:
+            if db.execute('SELECT plugin_id FROM oauth_clients WHERE plugin_id=?',(plugin_id,)).fetchone():
+                return
+        redirect_uri=setting('MOM_LIFE_PLUGIN_'+plugin_id.replace('-','_').upper()+'_OAUTH_REDIRECT_URI') or 'http://localhost:3000/api/oauth/callback'
+        async with httpx.AsyncClient(timeout=20,follow_redirects=False,transport=self.transport) as client:
+            metadata_response=await client.get(provider['metadata_url'])
+            metadata_response.raise_for_status()
+            metadata=metadata_response.json()
+            registration_url=metadata.get('registration_endpoint')
+            if not registration_url or urlsplit(registration_url).scheme!='https':
+                raise ValueError('OAuth provider did not publish a secure client registration endpoint.')
+            response=await client.post(registration_url,json={
+                'client_name':'mom.life',
+                'redirect_uris':[redirect_uri],
+                'scope':provider['scopes'],
+                'grant_types':['authorization_code','refresh_token'],
+                'response_types':['code'],
+                'token_endpoint_auth_method':provider['token_endpoint_auth_method'],
+            })
+            if response.status_code not in {200,201}:
+                raise ValueError('OAuth provider rejected dynamic client registration.')
+            registered=response.json()
+        config={
+            'authorize_url':metadata.get('authorization_endpoint'),
+            'token_url':metadata.get('token_endpoint'),
+            'client_id':registered.get('client_id'),
+            'client_secret':registered.get('client_secret'),
+            'redirect_uri':redirect_uri,
+            'scopes':provider['scopes'],
+            'resource':provider['resource'],
+        }
+        if not all(config[name] for name in ['authorize_url','token_url','client_id']):
+            raise ValueError('OAuth provider returned an incomplete client registration.')
+        encrypted=self.cipher.encrypt(json.dumps(config).encode()).decode()
+        with self.store._connect() as db:
+            db.execute('INSERT INTO oauth_clients VALUES (?,?) ON CONFLICT (plugin_id) DO NOTHING',(plugin_id,encrypted))
+
+    def has_registered_config(self,plugin_id):
+        prefix='MOM_LIFE_PLUGIN_'+plugin_id.replace('-','_').upper()+'_OAUTH_'
+        if setting(prefix+'CLIENT_ID'):
+            return True
+        with self.store._connect() as db:
+            return db.execute('SELECT plugin_id FROM oauth_clients WHERE plugin_id=?',(plugin_id,)).fetchone() is not None
+
+    async def begin(self,family_id,plugin_id):
         if plugin_id not in self.store.installed_plugins(family_id):
             raise ValueError('Install the connection first.')
+        if plugin_id in DYNAMIC_OAUTH_PROVIDERS and not self.has_registered_config(plugin_id):
+            await self.register_dynamic_client(plugin_id)
         config=self.config(plugin_id)
         state=secrets.token_urlsafe(32)
         verifier=secrets.token_urlsafe(64)
@@ -68,6 +182,8 @@ class OAuthConnections:
             db.execute('DELETE FROM oauth_attempts WHERE expires_at<?',(time.time(),))
             db.execute('INSERT INTO oauth_attempts VALUES (?,?,?,?,?,?)',(hashlib.sha256(state.encode()).hexdigest(),family_id,plugin_id,self.cipher.encrypt(verifier.encode()).decode(),self.cipher.encrypt(json.dumps(config).encode()).decode(),time.time()+600))
         params={'response_type':'code','client_id':config['client_id'],'redirect_uri':config['redirect_uri'],'scope':config['scopes'],'state':state,'code_challenge':challenge,'code_challenge_method':'S256'}
+        if plugin_id in GOOGLE_PLUGINS:
+            params.update({'access_type':'offline','include_granted_scopes':'true','prompt':'consent'})
         if config['resource']:
             params['resource']=config['resource']
         return {'authorization_url':config['authorize_url']+('&' if '?' in config['authorize_url'] else '?')+urlencode(params)}
@@ -95,6 +211,8 @@ class OAuthConnections:
             tokens=response.json()
         if not tokens.get('access_token') or str(tokens.get('token_type','')).lower()!='bearer':
             raise ValueError('Provider did not return a bearer access token.')
+        if row['plugin_id'] in GOOGLE_PLUGINS and not tokens.get('refresh_token'):
+            raise ValueError('Google did not return offline access. Reconnect and approve access again.')
         tokens['expires_at']=time.time()+float(tokens.get('expires_in',3600))
         with self.store._connect() as db:
             if not db.execute('SELECT plugin_id FROM plugin_installations WHERE family_id=? AND plugin_id=?',(row['family_id'],row['plugin_id'])).fetchone():
