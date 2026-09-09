@@ -15,7 +15,8 @@
     "react": "latest",
     "react-dom": "latest",
     "react-markdown": "^10.1.0",
-    "remark-gfm": "^4.0.1"
+    "remark-gfm": "^4.0.1",
+    "simple-icons": "^16.30.0"
   },
   "devDependencies": {
     "@types/node": "latest",
