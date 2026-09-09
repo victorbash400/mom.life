@@ -92,3 +92,14 @@ def test_board_scope_resolves_only_own_family_skills(tmp_path):
     assert other not in str(assignment)
     assert 'workspace.gmail' in assignment['permitted_namespaces']
     assert store.get('other-family', goal['id']) is None
+
+
+def test_builtin_skill_changes_replace_removed_plugin_dependencies(tmp_path):
+    store=TaskStore(tmp_path/'skills.db')
+    original={'slug':'care','name':'Care','description':'Care','instructions':'Old','required_plugin_ids':['mychart']}
+    current={**original,'instructions':'Current','required_plugin_ids':['google-workspace']}
+    store.seed_skills('family',(original,))
+    store.seed_skills('family',(current,))
+    skill=store.skills('family')[0]
+    assert skill['instructions']=='Current'
+    assert skill['required_plugin_ids']==['google-workspace']

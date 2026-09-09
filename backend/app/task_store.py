@@ -417,7 +417,10 @@ class TaskStore(GoalLedger):
             for skill in skills:
                 connection.execute("""INSERT INTO family_skills
                     (id,family_id,slug,name,description,instructions,required_plugin_ids,source,version,created_at)
-                    VALUES (?,?,?,?,?,?,?,?,?,?) ON CONFLICT DO NOTHING""", (str(uuid4()), family_id, skill["slug"], skill["name"], skill["description"],
+                    VALUES (?,?,?,?,?,?,?,?,?,?) ON CONFLICT (family_id,slug) DO UPDATE SET
+                    name=excluded.name,description=excluded.description,instructions=excluded.instructions,
+                    required_plugin_ids=excluded.required_plugin_ids,version=excluded.version
+                    WHERE family_skills.source='builtin'""", (str(uuid4()), family_id, skill["slug"], skill["name"], skill["description"],
                     skill["instructions"], json.dumps(skill["required_plugin_ids"]), "builtin", 1, now()))
 
     def skills(self, family_id: str) -> list[dict[str, object]]:
