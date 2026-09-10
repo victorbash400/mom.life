@@ -128,6 +128,19 @@ class TaskStore(GoalLedger):
                     family_id TEXT NOT NULL, plugin_id TEXT NOT NULL, validated_at TEXT NOT NULL,
                     PRIMARY KEY(family_id,plugin_id)
                 );
+                CREATE TABLE IF NOT EXISTS simulator_connections (
+                    family_id TEXT NOT NULL, plugin_id TEXT NOT NULL, connected_at TEXT NOT NULL,
+                    PRIMARY KEY(family_id,plugin_id)
+                );
+                CREATE TABLE IF NOT EXISTS simulator_messages (
+                    id TEXT PRIMARY KEY, family_id TEXT NOT NULL, profile_id TEXT NOT NULL,
+                    direction TEXT NOT NULL CHECK(direction IN ('incoming','outgoing')),
+                    body TEXT NOT NULL, provider_event_id TEXT NOT NULL, created_at TEXT NOT NULL
+                );
+                CREATE TABLE IF NOT EXISTS simulator_actions (
+                    id TEXT PRIMARY KEY, family_id TEXT NOT NULL, plugin_id TEXT NOT NULL,
+                    action TEXT NOT NULL, detail TEXT NOT NULL DEFAULT '{}', created_at TEXT NOT NULL
+                );
             """)
             self._migrate_tasks(connection)
 
@@ -492,6 +505,7 @@ class TaskStore(GoalLedger):
                 connection.execute("DELETE FROM oauth_tokens WHERE family_id=? AND plugin_id=?",(family_id,plugin_id))
                 connection.execute("DELETE FROM oauth_attempts WHERE family_id=? AND plugin_id=?",(family_id,plugin_id))
             connection.execute("DELETE FROM plugin_connections WHERE family_id=? AND plugin_id=?", (family_id, plugin_id))
+            connection.execute("DELETE FROM simulator_connections WHERE family_id=? AND plugin_id=?", (family_id, plugin_id))
             connection.execute("DELETE FROM plugin_permissions WHERE family_id=? AND plugin_id=?", (family_id, plugin_id))
 
     def installed_plugins(self, family_id: str) -> set[str]:
@@ -505,6 +519,47 @@ class TaskStore(GoalLedger):
     def permissions(self, family_id: str, plugin_id: str) -> dict[str, bool]:
         with self._connect() as connection:
             return {row[0]: bool(row[1]) for row in connection.execute("SELECT permission_id,enabled FROM plugin_permissions WHERE family_id=? AND plugin_id=?", (family_id, plugin_id))}
+
+    def simulator_plugins(self, family_id: str) -> set[str]:
+        with self._connect() as connection:
+            return {row[0] for row in connection.execute("SELECT plugin_id FROM simulator_connections WHERE family_id=?", (family_id,))}
+
+    def set_simulator_plugin(self, family_id: str, plugin_id: str, connected: bool) -> None:
+        with self._connect() as connection:
+            if connected:
+                connection.execute(
+                    "INSERT INTO simulator_connections VALUES (?,?,?) ON CONFLICT (family_id,plugin_id) DO UPDATE SET connected_at=excluded.connected_at",
+                    (family_id, plugin_id, now()),
+                )
+            else:
+                connection.execute("DELETE FROM simulator_connections WHERE family_id=? AND plugin_id=?", (family_id, plugin_id))
+
+    def add_simulator_message(self, family_id: str, profile_id: str, direction: str, body: str, provider_event_id: str) -> dict[str, object]:
+        identity = str(uuid4())
+        with self._connect() as connection:
+            connection.execute(
+                "INSERT INTO simulator_messages VALUES (?,?,?,?,?,?,?)",
+                (identity, family_id, profile_id, direction, body, provider_event_id, now()),
+            )
+            row = connection.execute("SELECT * FROM simulator_messages WHERE id=?", (identity,)).fetchone()
+        return dict(row)
+
+    def simulator_messages(self, family_id: str, limit: int = 80) -> list[dict[str, object]]:
+        with self._connect() as connection:
+            rows = connection.execute(
+                "SELECT * FROM simulator_messages WHERE family_id=? ORDER BY created_at DESC LIMIT ?",
+                (family_id, limit),
+            ).fetchall()
+        return [dict(row) for row in reversed(rows)]
+
+    def add_simulator_action(self, family_id: str, plugin_id: str, action: str, detail: object) -> dict[str, object]:
+        identity = str(uuid4())
+        with self._connect() as connection:
+            connection.execute(
+                "INSERT INTO simulator_actions VALUES (?,?,?,?,?,?)",
+                (identity, family_id, plugin_id, action, json.dumps(detail, default=str), now()),
+            )
+        return {"id": identity, "plugin_id": plugin_id, "action": action, "detail": detail}
 
     def seed_skills(self, family_id: str, skills: tuple[dict[str, object], ...]) -> None:
         with self._connect() as connection:

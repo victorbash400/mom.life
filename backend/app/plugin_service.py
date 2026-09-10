@@ -12,13 +12,16 @@ class PluginService:
 
     def list(self, family_id):
         installed = self.store.installed_plugins(family_id)
+        simulated = self.store.simulator_plugins(family_id)
         with self.store._connect() as db:
             validated = {row['plugin_id']:row['validated_at'] for row in db.execute('SELECT * FROM plugin_connections WHERE family_id=?',(family_id,))}
         from plugins.oauth import OAuthConnections
         oauth = OAuthConnections(self.store)
         identities = {plugin_id:oauth.identity(family_id,plugin_id) for plugin_id in installed}
         return [{**plugin_snapshot(plugin,plugin.id in installed,self.store.permissions(family_id,plugin.id)),
-                 'connected':plugin.id in installed and plugin.id in validated,
+                 'connected':plugin.id in installed and (plugin.id in validated or plugin.id in simulated),
+                 'connection_mode':'simulated' if plugin.id in simulated else ('live' if plugin.id in validated else None),
+                 'simulation_supported':plugin.id in {'whatsapp','apple-health','fitbit','withings','instacart'},
                  'validated_at':validated.get(plugin.id),
                  'account_label': (identities.get(plugin.id) or {}).get('email'),
                  'account_name': (identities.get(plugin.id) or {}).get('name'),

@@ -52,6 +52,8 @@ from app.whatsapp_webhook import router as webhook_router
 app.include_router(webhook_router)
 from app.apple_health_routes import router as apple_health_router
 app.include_router(apple_health_router)
+from app.simulator_routes import router as simulator_router
+app.include_router(simulator_router)
 from app.oauth_routes import router as oauth_router
 app.include_router(oauth_router)
 settings = get_settings()

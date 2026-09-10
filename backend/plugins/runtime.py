@@ -33,6 +33,17 @@ class PluginToolSession:
         if plugin_id in self.loaded:
             return self.loaded[plugin_id]
         plugin = plugin_by_id(owner(plugin_id))
+        simulated = bool(self.store and owner(plugin_id) in self.store.simulator_plugins(self.family_id))
+        if simulated:
+            if owner(plugin_id) == 'apple-health':
+                from plugins.apple_health_adapter import AppleHealthAdapter
+                adapter = AppleHealthAdapter(self.family_id,self.store)
+            else:
+                from plugins.simulator_adapter import SimulatorAdapter
+                adapter = SimulatorAdapter(owner(plugin_id),self.family_id,self.store)
+            self.clients[plugin_id] = adapter
+            self.loaded[plugin_id] = adapter.directory()
+            return self.loaded[plugin_id]
         if plugin.transport == 'agentcore':
             from plugins.browser_adapter import BrowserAdapter
             adapter = BrowserAdapter(self.family_id,self.store,self.assignment_id)
