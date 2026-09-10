@@ -1,7 +1,10 @@
 .nav { position: absolute; right: 0; bottom: clamp(45px,8.2vh,89px); left: 0; display: flex; justify-content: center; align-items: center; gap: 17px; }
-.nav > button { position: relative; display: grid; width: 36px; height: 36px; padding: 0; place-items: center; border: 0; color: #9d6b65; background: transparent; cursor: pointer; transition: color 160ms ease,transform 160ms ease; }
-.nav > button:hover { color: #885853; transform: translateY(-1px); }
-.nav > button:focus-visible { outline: 2px solid #b97771; outline-offset: 1px; }
-.nav > button::after { position: absolute; bottom: calc(100% + 8px); left: 50%; z-index: 2; padding: 6px 9px; border: 1px solid rgb(255 255 255 / 15%); border-radius: 9px; color: #fff; background: rgb(70 55 50 / 92%); box-shadow: 0 7px 18px rgb(69 47 40 / 16%); content: attr(data-tooltip); font-size: 10px; font-weight: 510; line-height: 1; white-space: nowrap; opacity: 0; pointer-events: none; transform: translate(-50%,4px); transition: opacity 130ms ease,transform 130ms ease; transition-delay: 0ms; }
-.nav > button:hover::after,.nav > button:focus-visible::after { opacity: 1; transform: translate(-50%,0); transition-delay: 180ms; }
-@media (prefers-reduced-motion: reduce) { .nav > button,.nav > button::after { transition: none; } }
+.tool,.toggle { position: relative; display: grid; flex: 0 0 36px; width: 36px; height: 36px; padding: 0; place-items: center; border: 0; color: #9d6b65; background: transparent; cursor: pointer; transition: color 160ms ease,transform 160ms ease; }
+.tool:hover,.toggle:hover { color: #885853; transform: translateY(-1px); }
+.tool:focus-visible,.toggle:focus-visible { outline: 2px solid #b97771; outline-offset: 1px; }
+.tool::after,.toggle::after { position: absolute; bottom: calc(100% + 8px); left: 50%; z-index: 2; padding: 6px 9px; border: 1px solid rgb(255 255 255 / 15%); border-radius: 9px; color: #fff; background: rgb(70 55 50 / 92%); box-shadow: 0 7px 18px rgb(69 47 40 / 16%); content: attr(data-tooltip); font-size: 10px; font-weight: 510; line-height: 1; white-space: nowrap; opacity: 0; pointer-events: none; transform: translate(-50%,4px); transition: opacity 130ms ease,transform 130ms ease; transition-delay: 0ms; }
+.tool:hover::after,.tool:focus-visible::after,.toggle:hover::after,.toggle:focus-visible::after { opacity: 1; transform: translate(-50%,0); transition-delay: 180ms; }
+.overflow { display: flex; width: 0; max-width: var(--overflow-width); align-items: center; gap: 17px; opacity: 0; overflow: hidden; transform: translateX(-8px); transition: width 220ms cubic-bezier(.22,.8,.3,1),opacity 140ms ease,transform 220ms cubic-bezier(.22,.8,.3,1); }
+.nav[data-expanded="true"] .overflow { width: var(--overflow-width); opacity: 1; overflow: visible; transform: translateX(0); }
+.toggle svg { width: 17px; height: 17px; stroke-width: 1.8; }
+@media (prefers-reduced-motion: reduce) { .tool,.toggle,.tool::after,.toggle::after,.overflow { transition: none; } }
