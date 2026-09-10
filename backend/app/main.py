@@ -3,7 +3,7 @@ import json
 from contextlib import asynccontextmanager
 from pathlib import Path
 
-from fastapi import FastAPI, HTTPException
+from fastapi import BackgroundTasks, FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from starlette.responses import StreamingResponse
 
@@ -20,9 +20,11 @@ from plugins.catalog import PLUGINS, plugin_by_id, plugin_snapshot
 @asynccontextmanager
 async def lifespan(app):
     task_store.recover()
-    await security_agent.recover()
-    await education_agent.recover()
-    await intake_agent.recover()
+    await asyncio.gather(
+        security_agent.recover(),
+        education_agent.recover(),
+        intake_agent.recover(),
+    )
     try:
         yield
     finally:
@@ -113,12 +115,12 @@ def list_tasks(family_id: str) -> list[dict[str, object]]:
 
 
 @app.post("/api/tasks", status_code=201)
-async def create_task(body: TaskCreate) -> dict[str, object]:
+async def create_task(body: TaskCreate, background_tasks: BackgroundTasks) -> dict[str, object]:
     from app.auth import families
     if body.child_id != 'all' and not families.child(body.family_id,body.child_id):
         raise HTTPException(404,"Child not found.")
     goal = task_store.create(body.family_id, body.child_id, body.text)
-    await goal_tasks.start(body.family_id, str(goal["id"]))
+    background_tasks.add_task(goal_tasks.start, body.family_id, str(goal["id"]), known_active=True)
     return goal
 
 
@@ -163,8 +165,11 @@ def task_events(family_id: str) -> StreamingResponse:
         try:
             yield f"data: {json.dumps({'type': 'connected'})}\n\n"
             while True:
-                event = await queue.get()
-                yield f"data: {json.dumps(event)}\n\n"
+                try:
+                    event = await asyncio.wait_for(queue.get(), timeout=20)
+                    yield f"data: {json.dumps(event)}\n\n"
+                except TimeoutError:
+                    yield ": keepalive\n\n"
         except asyncio.CancelledError:
             raise
         finally:

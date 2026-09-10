@@ -71,7 +71,7 @@ class BrowserAdapter:
                     saved = db.execute("SELECT * FROM browser_sessions WHERE assignment_id=?",(self.assignment_id,)).fetchone()
             if saved:
                 if saved['expires_at'] <= time.time():
-                    raise ValueError('The approved browser session expired. Revise the task to inspect and prepare a new session.')
+                    raise ValueError('The managed browser session expired. Revise the task to inspect and prepare a new session.')
                 self.session_id = saved['session_id']
                 self.client._identifier = 'aws.browser.v1'
                 self.client._session_id = self.session_id

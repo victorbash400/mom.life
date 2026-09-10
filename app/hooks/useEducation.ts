@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
+import { subscribeFamilyEvents } from "../lib/familyEvents";
 import type { EducationSnapshot } from "../types/education";
 
 export function useEducation() {
@@ -24,13 +25,11 @@ export function useEducation() {
 
   useEffect(() => {
     const frame = requestAnimationFrame(() => void refresh());
-    const events = new EventSource("/api/tasks/events");
-    events.onmessage = (message) => {
-      const event = JSON.parse(message.data) as { type?: string };
-      if (event.type === "education_changed") void refresh();
-    };
-    events.onerror = () => setError("Live education updates are disconnected. Reconnecting…");
-    return () => { cancelAnimationFrame(frame); events.close(); };
+    const unsubscribe = subscribeFamilyEvents({
+      onEvent: (event) => { if (event.type === "education_changed") void refresh(); },
+      onConnection: (connected) => { connected ? void refresh() : setError("Live education updates are disconnected. Reconnecting…"); },
+    });
+    return () => { cancelAnimationFrame(frame); unsubscribe(); };
   }, [refresh]);
 
   return { error, loaded, snapshots };

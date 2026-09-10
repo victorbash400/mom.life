@@ -6,4 +6,5 @@
   overflow: visible;
 }
 .shape { transition: d 420ms cubic-bezier(.22, 1, .36, 1); }
-@media (prefers-reduced-motion: reduce) { .shape { transition: none; } }
+.stop { transition: stop-color 300ms ease, stop-opacity 300ms ease; }
+@media (prefers-reduced-motion: reduce) { .shape,.stop { transition: none; } }

@@ -14,6 +14,9 @@ class Settings(BaseSettings):
     strands_model_id: str = "moonshotai.kimi-k2.5"
     reasoning_model_id: str = "openai.gpt-5.6-luna"
     voice_model_id: str = "amazon.nova-2-sonic-v1:0"
+    model_timeout_seconds: int = 60
+    model_service_tier: str = "priority"
+    model_max_tokens: int = 2048
     bedrock_project_id: str = "proj_t6e6u24fw7kbzz5otsfo"
     aws_profile: str = Field(default="", validation_alias=AliasChoices("MOM_LIFE_AWS_PROFILE", "AWS_PROFILE"))
     cors_origins: str = "http://localhost:3000"

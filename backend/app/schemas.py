@@ -46,7 +46,6 @@ class GoalRevision(BaseModel):
 
 class QuestionAnswer(BaseModel):
     answer: str = Field(min_length=1,max_length=20000)
-    approved: bool = False
 
 
 class IntakeRetry(BaseModel):

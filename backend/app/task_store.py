@@ -1,6 +1,6 @@
 import json
 import sqlite3
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from uuid import uuid4
 
@@ -130,6 +130,17 @@ class TaskStore(GoalLedger):
                     question TEXT NOT NULL, context TEXT NOT NULL, action TEXT NOT NULL,
                     state TEXT NOT NULL, answer TEXT NOT NULL, created_at TEXT NOT NULL, answered_at TEXT
                 );
+                CREATE TABLE IF NOT EXISTS provider_events (
+                    id TEXT PRIMARY KEY, family_id TEXT NOT NULL, plugin_id TEXT NOT NULL,
+                    correlation TEXT NOT NULL, payload TEXT NOT NULL, created_at TEXT NOT NULL,
+                    UNIQUE(family_id,plugin_id,id)
+                );
+                CREATE TABLE IF NOT EXISTS provider_waits (
+                    id TEXT PRIMARY KEY, goal_id TEXT NOT NULL REFERENCES family_tasks(id) ON DELETE CASCADE,
+                    assignment_id TEXT NOT NULL REFERENCES goal_assignments(id) ON DELETE CASCADE,
+                    family_id TEXT NOT NULL, plugin_id TEXT NOT NULL, correlation TEXT NOT NULL,
+                    state TEXT NOT NULL, created_at TEXT NOT NULL
+                );
                 CREATE TABLE IF NOT EXISTS plugin_connections (
                     family_id TEXT NOT NULL, plugin_id TEXT NOT NULL, validated_at TEXT NOT NULL,
                     PRIMARY KEY(family_id,plugin_id)
@@ -189,7 +200,42 @@ class TaskStore(GoalLedger):
     def list(self, family_id: str) -> list[dict[str, object]]:
         with self._connect() as connection:
             rows = connection.execute("SELECT * FROM family_tasks WHERE family_id=? ORDER BY created_at DESC", (family_id,)).fetchall()
-            return [self._goal_snapshot(connection, row) for row in rows]
+            assignments = connection.execute("""SELECT assignment.* FROM goal_assignments assignment
+                JOIN family_tasks goal ON goal.id=assignment.goal_id
+                WHERE goal.family_id=? ORDER BY assignment.created_at""", (family_id,)).fetchall()
+            questions = connection.execute("""SELECT question.* FROM goal_questions question
+                JOIN family_tasks goal ON goal.id=question.goal_id
+                WHERE goal.family_id=? ORDER BY question.created_at""", (family_id,)).fetchall()
+            activities = connection.execute("""SELECT activity.* FROM goal_activities activity
+                JOIN family_tasks goal ON goal.id=activity.goal_id
+                WHERE goal.family_id=? ORDER BY activity.created_at""", (family_id,)).fetchall()
+            skills = {skill["id"]: {**dict(skill), "required_plugin_ids": json.loads(skill["required_plugin_ids"])}
+                      for skill in connection.execute("SELECT * FROM family_skills WHERE family_id=?", (family_id,))}
+        assignments_by_goal: dict[str, list[dict[str, object]]] = {}
+        from plugins.namespaces import namespaces
+        for row in assignments:
+            assignment = self._assignment_snapshot(row)
+            assignment["skills"] = [skills[identity] for identity in assignment["skill_ids"] if identity in skills]
+            assignment["permitted_namespaces"] = namespaces(list(dict.fromkeys(
+                identity for skill in assignment["skills"] for identity in skill["required_plugin_ids"]
+            )))
+            assignments_by_goal.setdefault(str(row["goal_id"]), []).append(assignment)
+        questions_by_goal: dict[str, list[dict[str, object]]] = {}
+        for row in questions:
+            questions_by_goal.setdefault(str(row["goal_id"]), []).append(self._question_snapshot(row))
+        activities_by_goal: dict[str, list[dict[str, object]]] = {}
+        for row in activities:
+            activities_by_goal.setdefault(str(row["goal_id"]), []).append({**dict(row), "evidence": json.loads(row["evidence"])})
+        goals = []
+        for row in rows:
+            goal = dict(row)
+            goal["skill_ids"] = json.loads(goal["skill_ids"] or "[]")
+            goal["plugin_ids"] = json.loads(goal["plugin_ids"] or "[]")
+            goal["assignments"] = assignments_by_goal.get(str(row["id"]), [])
+            goal["questions"] = questions_by_goal.get(str(row["id"]), [])
+            goal["activities"] = activities_by_goal.get(str(row["id"]), [])
+            goals.append(goal)
+        return goals
 
     def receive_incoming(
         self,
@@ -205,6 +251,10 @@ class TaskStore(GoalLedger):
     ) -> tuple[dict[str, object], bool]:
         source = source.strip()
         provider_event_id = provider_event_id.strip()
+        correlation = correlation.strip()
+        sender = sender.strip()
+        subject = subject.strip()
+        content = content.strip()
         if not source or not provider_event_id:
             raise ValueError("Incoming information needs a source and provider event ID.")
         with self._connect() as connection:
@@ -215,6 +265,14 @@ class TaskStore(GoalLedger):
             ).fetchone()
             if existing:
                 return self._incoming_snapshot(connection, existing), False
+            replay = connection.execute(
+                """SELECT * FROM incoming_items
+                WHERE family_id=? AND source=? AND correlation=? AND sender=? AND subject=? AND content=? AND created_at>=?
+                ORDER BY created_at DESC LIMIT 1""",
+                (family_id, source, correlation, sender, subject, content, (datetime.now(UTC) - timedelta(minutes=5)).isoformat()),
+            ).fetchone()
+            if replay:
+                return self._incoming_snapshot(connection, replay), False
             identity = str(uuid4())
             connection.execute(
                 """INSERT INTO incoming_items
@@ -244,6 +302,9 @@ class TaskStore(GoalLedger):
 
     def delete_incoming(self, family_id: str, incoming_id: str) -> bool:
         with self._connect() as connection:
+            connection.execute("BEGIN IMMEDIATE")
+            connection.execute("DELETE FROM security_reviews WHERE incoming_id=? AND family_id=?", (incoming_id, family_id))
+            connection.execute("DELETE FROM education_reviews WHERE incoming_id=? AND family_id=?", (incoming_id, family_id))
             result = connection.execute("DELETE FROM incoming_items WHERE id=? AND family_id=?", (incoming_id, family_id))
             return result.rowcount > 0
 
@@ -463,8 +524,7 @@ class TaskStore(GoalLedger):
             connection.execute("""INSERT INTO family_tasks
                 (id,family_id,child_id,text,status,created_at,updated_at,run_state,current_step,progress,report,skill_ids,plugin_ids)
                 VALUES (:id,:family_id,:child_id,:text,:status,:created_at,:updated_at,:run_state,:current_step,:progress,:report,:skill_ids,:plugin_ids)""", goal)
-            row = connection.execute("SELECT * FROM family_tasks WHERE id=?", (goal["id"],)).fetchone()
-            return self._goal_snapshot(connection, row)
+        return {**goal, "skill_ids": [], "plugin_ids": [], "assignments": [], "questions": [], "activities": []}
 
     def update(self, task_id: str, status: str) -> dict[str, object] | None:
         run_state = "completed" if status == "completed" else "paused" if status == "paused" else "queued"
@@ -578,6 +638,73 @@ class TaskStore(GoalLedger):
             row = connection.execute("SELECT * FROM simulator_messages WHERE id=?", (identity,)).fetchone()
         return dict(row)
 
+    def receive_simulator_incoming(self, family_id: str, profile_id: str, sender: str, body: str, event_id: str, payload: object) -> dict[str, object]:
+        """Persist one simulated provider event, message, and its review jobs atomically."""
+        timestamp = now()
+        message_id = str(uuid4())
+        with self._connect() as connection:
+            connection.execute("BEGIN IMMEDIATE")
+            connected = connection.execute(
+                "SELECT 1 AS connected FROM simulator_connections WHERE family_id=? AND plugin_id='whatsapp'", (family_id,),
+            ).fetchone()
+            if not connected:
+                raise ValueError("Connect WhatsApp Simulator first.")
+            if connection.execute("SELECT id FROM provider_events WHERE id=?", (event_id,)).fetchone():
+                return {"created": False, "duplicate": True, "matched": False, "goal_ids": []}
+            correlation = f"sim:{profile_id}"
+            connection.execute("INSERT INTO provider_events VALUES (?,?,?,?,?,?)",
+                (event_id, family_id, "whatsapp", correlation, json.dumps(payload, default=str), timestamp))
+            waits = connection.execute(
+                """SELECT wait.*,goal.status AS goal_status FROM provider_waits wait
+                JOIN family_tasks goal ON goal.id=wait.goal_id
+                JOIN goal_assignments assignment ON assignment.id=wait.assignment_id
+                WHERE wait.family_id=? AND wait.plugin_id='whatsapp' AND wait.correlation=?
+                AND wait.state='waiting' AND goal.status IN ('active','paused')
+                AND assignment.status IN ('running','blocked')""", (family_id, correlation),
+            ).fetchall()
+            goal_ids = []
+            for wait in waits:
+                connection.execute("UPDATE provider_waits SET state='received' WHERE id=?", (wait["id"],))
+                connection.execute("UPDATE goal_assignments SET status='queued',phase='queued' WHERE id=? AND status='blocked'", (wait["assignment_id"],))
+                if wait["goal_status"] == "active":
+                    connection.execute("UPDATE family_tasks SET run_state='queued' WHERE id=?", (wait["goal_id"],))
+                    goal_ids.append(wait["goal_id"])
+                connection.execute("INSERT INTO goal_activities VALUES (?,?,?,?,?,?)", (
+                    str(uuid4()), wait["goal_id"], "provider_event", "Received the awaited provider event",
+                    json.dumps({"plugin_id": "whatsapp", "event_id": event_id, "payload": payload}, default=str), timestamp,
+                ))
+            connection.execute("INSERT INTO simulator_messages VALUES (?,?,?,?,?,?,?)",
+                (message_id, family_id, profile_id, "incoming", body, event_id, timestamp))
+            if waits:
+                return {"created": False, "duplicate": False, "matched": True, "goal_ids": list(dict.fromkeys(goal_ids))}
+            replay = connection.execute(
+                """SELECT id FROM incoming_items
+                WHERE family_id=? AND source='whatsapp' AND correlation=? AND sender=? AND subject='' AND content=? AND created_at>=?
+                ORDER BY created_at DESC LIMIT 1""",
+                (family_id, f"sim:{profile_id}", sender, body, (datetime.now(UTC) - timedelta(minutes=5)).isoformat()),
+            ).fetchone()
+            if replay:
+                return {"created": False, "duplicate": False, "matched": False, "goal_ids": [], "incoming_id": replay["id"]}
+            incoming_id = str(uuid4())
+            connection.execute(
+                """INSERT INTO incoming_items
+                (id,family_id,source,provider_event_id,correlation,sender,subject,content,payload,status,created_at)
+                VALUES (?,?, 'whatsapp', ?,?,?, '',?,?,'queued',?)""",
+                (incoming_id, family_id, event_id, f"sim:{profile_id}", sender, body, json.dumps(payload, default=str), timestamp),
+            )
+            connection.execute("INSERT INTO intake_activities VALUES (?,?,?,?,?,?)",
+                (str(uuid4()), incoming_id, "received", "Received information from whatsapp.", "{}", timestamp))
+            security_id = str(uuid4())
+            connection.execute("INSERT INTO security_reviews (id,family_id,incoming_id,status,created_at) VALUES (?,?,?,'queued',?)",
+                (security_id, family_id, incoming_id, timestamp))
+            connection.execute("INSERT INTO security_activities VALUES (?,?,?,?,?,?)",
+                (str(uuid4()), security_id, "received", "Safety Agent received the item.", "{}", timestamp))
+            education_id = str(uuid4())
+            connection.execute("INSERT INTO education_reviews (id,family_id,incoming_id,status,created_at) VALUES (?,?,?,'queued',?)",
+                (education_id, family_id, incoming_id, timestamp))
+            return {"created": True, "duplicate": False, "matched": False, "goal_ids": [],
+                "incoming_id": incoming_id, "security_id": security_id, "education_id": education_id}
+
     def simulator_messages(self, family_id: str, limit: int = 80) -> list[dict[str, object]]:
         with self._connect() as connection:
             rows = connection.execute(
@@ -624,9 +751,15 @@ class TaskStore(GoalLedger):
             assignment["permitted_namespaces"] = namespaces(list(dict.fromkeys(
                 identity for skill in assignment["skills"] for identity in skill["required_plugin_ids"]
             )))
-        goal["questions"] = [{**dict(question), "action": json.loads(question["action"]) if question["action"] else None} for question in connection.execute("SELECT * FROM goal_questions WHERE goal_id=? ORDER BY created_at", (row["id"],))]
+        goal["questions"] = [self._question_snapshot(question) for question in connection.execute("SELECT * FROM goal_questions WHERE goal_id=? ORDER BY created_at", (row["id"],))]
         goal["activities"] = [{**dict(item), "evidence": json.loads(item["evidence"])} for item in connection.execute("SELECT * FROM goal_activities WHERE goal_id=? ORDER BY created_at", (row["id"],))]
         return goal
+
+    @staticmethod
+    def _question_snapshot(row) -> dict[str, object]:
+        question = dict(row)
+        question.pop("action", None)
+        return question
 
     @staticmethod
     def _incoming_snapshot(connection, row) -> dict[str, object]:

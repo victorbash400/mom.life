@@ -1,6 +1,7 @@
 import asyncio
 from datetime import date
 from types import SimpleNamespace
+from unittest.mock import AsyncMock
 
 from fastapi.testclient import TestClient
 
@@ -44,12 +45,10 @@ def test_simulated_whatsapp_reaches_the_real_intake_store(tmp_path, monkeypatch,
     store = TaskStore(tmp_path / "simulator.db")
     families = Families()
 
-    class Intake:
-        async def receive(self, family_id, source, event_id, **content):
-            return store.receive_incoming(family_id, source, event_id, **content)
-
     monkeypatch.setattr(main, "task_store", store)
-    monkeypatch.setattr(main, "intake_agent", Intake())
+    monkeypatch.setattr(main, "intake_agent", SimpleNamespace(start=AsyncMock()))
+    monkeypatch.setattr(main, "security_agent", SimpleNamespace(start=AsyncMock()))
+    monkeypatch.setattr(main, "education_agent", SimpleNamespace(start=AsyncMock()))
     monkeypatch.setattr(main, "goal_tasks", SimpleNamespace(start=lambda *_: None))
     monkeypatch.setattr(auth, "families", families)
     SimulatorService(store, families).connect("family", "whatsapp")

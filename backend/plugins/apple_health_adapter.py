@@ -12,12 +12,16 @@ SAMPLE_UNITS = {
     'heart_rate': 'count/min',
     'sleep_analysis': 'stage',
 }
+_INITIALIZED_DATABASES = set()
 
 
 class AppleHealthAdapter:
     def __init__(self, family_id, store):
         self.family_id = family_id
         self.store = store
+        target = str(store.database)
+        if target in _INITIALIZED_DATABASES:
+            return
         with store._connect() as db:
             db.execute('''CREATE TABLE IF NOT EXISTS apple_health_samples (
                 family_id TEXT NOT NULL, external_id TEXT NOT NULL, child_id TEXT NOT NULL,
@@ -25,6 +29,7 @@ class AppleHealthAdapter:
                 value REAL NOT NULL, unit TEXT NOT NULL, source TEXT NOT NULL, updated_at TEXT NOT NULL,
                 PRIMARY KEY (family_id, external_id)
             )''')
+        _INITIALIZED_DATABASES.add(target)
 
     def directory(self):
         filters = {'child_id':field('child_id','Child profile ID'),'date':field('date','Date in YYYY-MM-DD format')}
@@ -36,24 +41,30 @@ class AppleHealthAdapter:
         ]
 
     def sync(self, samples, deleted_ids):
+        changed_at = now()
+        rows = []
+        for sample in samples:
+            expected = SAMPLE_UNITS.get(sample.sample_type)
+            if expected != sample.unit:
+                raise ValueError(f'{sample.sample_type} must use the normalized unit {expected}.')
+            rows.append((
+                self.family_id,sample.external_id,sample.child_id,sample.sample_type,
+                sample.start_at.isoformat(),sample.end_at.isoformat(),sample.value,
+                sample.unit,sample.source,changed_at,
+            ))
         with self.store._connect() as db:
             db.execute('BEGIN IMMEDIATE')
-            for external_id in deleted_ids:
-                db.execute('DELETE FROM apple_health_samples WHERE family_id=? AND external_id=?',(self.family_id,external_id))
-            for sample in samples:
-                expected = SAMPLE_UNITS.get(sample.sample_type)
-                if expected != sample.unit:
-                    raise ValueError(f'{sample.sample_type} must use the normalized unit {expected}.')
-                db.execute('''INSERT INTO apple_health_samples
+            db.executemany(
+                'DELETE FROM apple_health_samples WHERE family_id=? AND external_id=?',
+                ((self.family_id, external_id) for external_id in deleted_ids),
+            )
+            db.executemany('''INSERT INTO apple_health_samples
                     (family_id,external_id,child_id,sample_type,start_at,end_at,value,unit,source,updated_at)
                     VALUES (?,?,?,?,?,?,?,?,?,?)
                     ON CONFLICT (family_id,external_id) DO UPDATE SET
                     child_id=excluded.child_id,sample_type=excluded.sample_type,start_at=excluded.start_at,
                     end_at=excluded.end_at,value=excluded.value,unit=excluded.unit,
-                    source=excluded.source,updated_at=excluded.updated_at''',
-                    (self.family_id,sample.external_id,sample.child_id,sample.sample_type,
-                     sample.start_at.isoformat(),sample.end_at.isoformat(),sample.value,
-                     sample.unit,sample.source,now()))
+                    source=excluded.source,updated_at=excluded.updated_at''', rows)
         return self.latest_sync()
 
     def latest_sync(self):

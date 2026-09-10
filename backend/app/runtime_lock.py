@@ -1,37 +1,48 @@
 import fcntl
+import hashlib
 from pathlib import Path
 
 
-def acquire(path: Path, identity: str):
-    if path.name == 'postgres':
-        import hashlib
-        import psycopg
-        from app.config import get_settings
-        key = int.from_bytes(hashlib.sha256(identity.encode()).digest()[:8], 'big', signed=True)
-        connection = psycopg.connect(get_settings().database_url, autocommit=True)
-        if connection.execute('SELECT pg_try_advisory_lock(%s)', (key,)).fetchone()[0]:
-            return connection
-        connection.close()
+def _postgres_lock(path: Path, identity: str, *, wait: bool):
+    if path.name != "postgres":
         return None
-    directory = path.parent / 'runtime-locks'
-    directory.mkdir(parents=True,exist_ok=True)
-    import hashlib
-    file = (directory / hashlib.sha256(identity.encode()).hexdigest()).open('a')
+    import psycopg
+    from app.config import get_settings
+    key = int.from_bytes(hashlib.sha256(identity.encode()).digest()[:8], "big", signed=True)
+    connection = psycopg.connect(get_settings().database_url, autocommit=True)
+    function = "pg_advisory_lock" if wait else "pg_try_advisory_lock"
+    acquired = connection.execute(f"SELECT {function}(%s)", (key,)).fetchone()[0]
+    if wait or acquired:
+        return connection
+    connection.close()
+    return None
+
+
+def _file_lock(path: Path, identity: str, *, wait: bool):
+    directory = path.parent / "runtime-locks"
+    directory.mkdir(parents=True, exist_ok=True)
+    file = (directory / hashlib.sha256(identity.encode()).hexdigest()).open("a")
     try:
-        fcntl.flock(file.fileno(),fcntl.LOCK_EX | fcntl.LOCK_NB)
+        mode = fcntl.LOCK_EX if wait else fcntl.LOCK_EX | fcntl.LOCK_NB
+        fcntl.flock(file.fileno(), mode)
         return file
     except BlockingIOError:
         file.close()
         return None
 
 
-def release(file):
-    if not hasattr(file, 'fileno'):
-        file.close()
+def acquire(path: Path, identity: str):
+    return _postgres_lock(path, identity, wait=False) if path.name == "postgres" else _file_lock(path, identity, wait=False)
+
+
+def acquire_wait(path: Path, identity: str):
+    """Wait for exclusive ownership without retry loops."""
+    return _postgres_lock(path, identity, wait=True) if path.name == "postgres" else _file_lock(path, identity, wait=True)
+
+
+def release(lock):
+    if hasattr(lock, "execute"):
+        lock.close()
         return
-    # psycopg connections also expose fileno; distinguish their SQL interface.
-    if hasattr(file, 'execute'):
-        file.close()
-        return
-    fcntl.flock(file.fileno(),fcntl.LOCK_UN)
-    file.close()
+    fcntl.flock(lock.fileno(), fcntl.LOCK_UN)
+    lock.close()

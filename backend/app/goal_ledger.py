@@ -68,19 +68,18 @@ class GoalLedger:
             validate_dependencies(db.execute('SELECT * FROM goal_assignments WHERE goal_id=?',(goal_id,)).fetchall())
             db.execute("UPDATE family_tasks SET run_state='queued',updated_at=? WHERE id=?", (now(),goal_id))
 
-    def question(self, goal_id, assignment_id, question, context='', action=None):
+    def question(self, goal_id, assignment_id, question, context=''):
         from app.task_store import now
-        action_json = json.dumps(action, sort_keys=True) if action else ''
         with self._connect() as db:
             db.execute('BEGIN IMMEDIATE')
-            existing = db.execute("SELECT id FROM goal_questions WHERE assignment_id=? AND question=? AND action=? AND state='open'", (assignment_id,question,action_json)).fetchone()
+            existing = db.execute("SELECT id FROM goal_questions WHERE assignment_id=? AND question=? AND state='open'", (assignment_id,question)).fetchone()
             if existing:
                 return existing['id']
             identity = str(uuid4())
-            db.execute('INSERT INTO goal_questions VALUES (?,?,?,?,?,?,?, ?,?,?)', (identity,goal_id,assignment_id,question,context,action_json,'open','',now(),None))
+            db.execute('INSERT INTO goal_questions VALUES (?,?,?,?,?,?,?, ?,?,?)', (identity,goal_id,assignment_id,question,context,'','open','',now(),None))
             return identity
 
-    def answer_question(self, family_id, goal_id, question_id, answer, approved=False):
+    def answer_question(self, family_id, goal_id, question_id, answer):
         from app.task_store import now
         with self._connect() as db:
             db.execute('BEGIN IMMEDIATE')
@@ -89,23 +88,15 @@ class GoalLedger:
                 raise ValueError('Question is missing or already answered.')
             if not answer.strip():
                 raise ValueError('An answer is required.')
-            state = 'approved' if approved and row['action'] else 'answered'
-            db.execute('UPDATE goal_questions SET answer=?,state=?,answered_at=? WHERE id=?', (answer,state,now(),question_id))
+            db.execute("UPDATE goal_questions SET answer=?,state='answered',answered_at=? WHERE id=?", (answer,now(),question_id))
             db.execute("UPDATE goal_assignments SET status='queued',phase='queued',finished_at=NULL WHERE id=? AND status='blocked'", (row['assignment_id'],))
             db.execute("UPDATE family_tasks SET status='active',run_state='queued',updated_at=? WHERE id=?", (now(),goal_id))
 
-    def consume_approval(self, assignment_id, action):
-        with self._connect() as db:
-            db.execute("BEGIN IMMEDIATE")
-            row = db.execute("SELECT id FROM goal_questions WHERE assignment_id=? AND action=? AND state='approved' ORDER BY created_at LIMIT 1", (assignment_id,json.dumps(action,sort_keys=True))).fetchone()
-            if not row:
-                return False
-            db.execute("UPDATE goal_questions SET state='consumed' WHERE id=?", (row['id'],))
-            return True
-
     def questions(self, goal_id):
         with self._connect() as db:
-            return [{**dict(r),'action':json.loads(r['action']) if r['action'] else None} for r in db.execute('SELECT * FROM goal_questions WHERE goal_id=? ORDER BY created_at', (goal_id,))]
+            rows = db.execute('''SELECT id,goal_id,assignment_id,question,context,state,answer,created_at,answered_at
+                FROM goal_questions WHERE goal_id=? ORDER BY created_at''', (goal_id,))
+            return [dict(row) for row in rows]
 
     def save_skill(self, family_id, payload, skill_id=None):
         from app.task_store import now
@@ -122,9 +113,12 @@ class GoalLedger:
 
     def recover(self):
         from app.runtime_lock import acquire, release
+        from app.goal_tasks import _ACTIVE_GOALS
         with self._connect() as db:
             identities = [r['id'] for r in db.execute("SELECT id FROM family_tasks WHERE status='active' AND run_state IN ('planning','queued','running')")]
         for identity in identities:
+            if identity in _ACTIVE_GOALS:
+                continue
             lease = acquire(self.path,identity)
             if lease is None:
                 continue

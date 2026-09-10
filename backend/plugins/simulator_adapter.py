@@ -20,7 +20,7 @@ class SimulatorAdapter:
         if self.plugin_id == "whatsapp":
             return [definition("send_text", "Send a message to a simulated family profile.", {
                 "to": field("to", "Simulated family profile ID"),
-                "text": field("text", "Exact approved message"),
+                "text": field("text", "Exact requested message"),
             }, True)]
         if self.plugin_id == "fitbit":
             return [

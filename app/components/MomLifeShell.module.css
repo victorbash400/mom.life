@@ -11,17 +11,11 @@
   background: #eee1d4 url("/mom-life-background.png") center / cover no-repeat;
 }
 
-.shell[data-mode="ask"],
-.shell[data-mode="tasks"],
-.shell[data-mode="calendar"],
-.shell[data-mode="incoming"],
-.shell[data-mode="security"] {
+.shell:not([data-mode="home"]) {
   --panel-top: clamp(142px, 19vh, 205px);
   --panel-inline: clamp(48px, 8vw, 116px);
   --panel-bottom: clamp(22px, 3vh, 32px);
 }
-.shell[data-mode="plugins"], .shell[data-mode="simulator"] { --panel-top: clamp(142px, 19vh, 205px); --panel-inline: clamp(48px, 8vw, 116px); --panel-bottom: clamp(22px, 3vh, 32px); }
-.shell[data-mode="child"], .shell[data-mode="child-info"] { --panel-top: clamp(150px, 21vh, 228px); --panel-inline: clamp(58px, 9.5vw, 138px); --panel-bottom: clamp(24px, 3.2vh, 35px); }
 
 @media (max-width: 760px) {
   .shell {
@@ -29,5 +23,5 @@
     --panel-inline: 20px;
     --panel-bottom: 20px;
   }
-  .shell[data-mode="ask"], .shell[data-mode="tasks"], .shell[data-mode="calendar"], .shell[data-mode="incoming"], .shell[data-mode="security"], .shell[data-mode="plugins"], .shell[data-mode="simulator"], .shell[data-mode="child"], .shell[data-mode="child-info"] { --panel-top: 138px; --panel-inline: 12px; --panel-bottom: 12px; }
+  .shell:not([data-mode="home"]) { --panel-top: 138px; --panel-inline: 12px; --panel-bottom: 12px; }
 }

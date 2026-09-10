@@ -14,6 +14,7 @@ def test_registration_children_and_folders_postgres():
         for client in clients:
             email = f'test-{uuid4()}@example.com'
             response = client.post('/api/auth/register', json={'name':'Test Parent','email':email,'password':'TestPassword!123'})
+            assert response.json()['family_id']
             assert response.status_code == 201, response.text
             client.headers['Authorization'] = 'Bearer ' + response.json()['token']
             family = client.get('/api/family').json()
@@ -72,10 +73,9 @@ def test_postgres_goal_ledger_and_session_precision():
     try:
         store.apply_plan(family,goal['id'],[AssignmentPlan(action='create',key='one',title='One',instruction='Prepare output',expected_outputs=['Output'])])
         task = store.assignments(goal['id'])[0]
-        question = store.question(goal['id'],task['id'],'Approve?',action={'name':'test'})
-        store.answer_question(family,goal['id'],question,'Yes',True)
-        assert store.consume_approval(task['id'],{'name':'test'})
-        assert not store.consume_approval(task['id'],{'name':'test'})
+        question = store.question(goal['id'],task['id'],'Which child?')
+        store.answer_question(family,goal['id'],question,'Amina')
+        assert store.questions(goal['id'])[0]['state'] == 'answered'
         store.set_permission(family,'todoist','todoist.0',True)
         store.set_permission(family,'todoist','todoist.0',False)
         assert not store.permissions(family,'todoist')['todoist.0']

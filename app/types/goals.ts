@@ -1,5 +1,5 @@
 export type Assignment = { id: string; title: string; instruction: string; skills: FamilySkill[]; permitted_namespaces: string[]; required_inputs: string[]; depends_on: string[]; status: string; phase: string; progress: number; current_step: string; next_step: string; report: string; expected_outputs: string[]; evidence: { evidence?: string; outputs?: { name: string; evidence: string }[] } };
-export type GoalQuestion = { id: string; question: string; context: string; state: string; answer: string; action?: { plugin_id: string; name: string; arguments: Record<string, unknown> } };
+export type GoalQuestion = { id: string; question: string; context: string; state: string; answer: string };
 export type FamilyTask = { id: string; family_id: string; child_id: string; text: string; status: "active" | "paused" | "completed"; run_state: string; current_step: string; progress: number; report: string; created_at: string; updated_at: string; activities: GoalActivity[]; assignments: Assignment[]; questions: GoalQuestion[] };
 export type FamilySkill = { id: string; name: string; description: string; instructions: string; required_plugin_ids: string[]; version: number };
 

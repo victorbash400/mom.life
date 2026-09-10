@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
+import { subscribeFamilyEvents } from "../lib/familyEvents";
 
 import type { SecuritySettings, SecuritySnapshot } from "../types/security";
 
@@ -39,13 +40,11 @@ export function useSecurity() {
 
   useEffect(() => {
     const frame = requestAnimationFrame(() => void refresh());
-    const events = new EventSource("/api/tasks/events");
-    events.onmessage = (message) => {
-      const event = JSON.parse(message.data) as { type?: string };
-      if (event.type === "security_changed") void refresh();
-    };
-    events.onerror = () => setError("Live safety updates are disconnected. Reconnecting…");
-    return () => { cancelAnimationFrame(frame); events.close(); };
+    const unsubscribe = subscribeFamilyEvents({
+      onEvent: (event) => { if (event.type === "security_changed") void refresh(); },
+      onConnection: (connected) => { connected ? void refresh() : setError("Live safety updates are disconnected. Reconnecting…"); },
+    });
+    return () => { cancelAnimationFrame(frame); unsubscribe(); };
   }, [refresh]);
 
   return { dismiss, error, loaded: Boolean(snapshot), refresh, reviews: snapshot?.reviews ?? [], retry, saveSettings, settings: snapshot?.settings };

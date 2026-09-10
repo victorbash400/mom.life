@@ -33,7 +33,7 @@ async def answer(goal_id: str, question_id: str, body: QuestionAnswer, family_id
         raise HTTPException(400,'Question is missing, already answered, or the answer is empty.')
     await manager.stop(goal_id)
     try:
-        store.answer_question(family_id,goal_id,question_id,body.answer,body.approved)
+        store.answer_question(family_id,goal_id,question_id,body.answer)
     except ValueError as error:
         raise HTTPException(400,str(error)) from error
     await manager.start(family_id,goal_id)

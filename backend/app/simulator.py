@@ -1,5 +1,6 @@
 from datetime import UTC, date, datetime, time, timedelta
 from hashlib import sha256
+from pathlib import Path
 from types import SimpleNamespace
 from uuid import uuid4
 
@@ -16,15 +17,33 @@ class SimulatorService:
         self.families = families
 
     def state(self, family_id):
-        parent = self.families.profile(family_id)
-        profiles = [{"id": "parent", "name": parent["name"], "role": "adult"}]
-        profiles.extend({"id": child["id"], "name": child["name"], "role": "child"} for child in self.families.list_children(family_id))
-        connected = self.store.simulator_plugins(family_id)
+        if isinstance(self.store.database, Path):
+            parent = self.families.profile(family_id)
+            profiles = [{"id": "parent", "name": parent["name"], "role": "adult"}]
+            profiles.extend({"id": child["id"], "name": child["name"], "role": "child"} for child in self.families.list_children(family_id))
+            connected = self.store.simulator_plugins(family_id)
+            return {
+                "profiles": profiles,
+                "connections": [{"id": plugin_id, "connected": plugin_id in connected} for plugin_id in sorted(SIMULATED_PLUGINS)],
+                "messages": self.store.simulator_messages(family_id),
+                "health": self.health_summary(family_id),
+            }
+        AppleHealthAdapter(family_id, self.store)
+        target_date = date.today().isoformat()
+        with self.store._connect() as db:
+            parent = db.execute('SELECT name FROM accounts WHERE family_id=? ORDER BY created_at LIMIT 1', (family_id,)).fetchone()
+            children = db.execute('SELECT id,name FROM children WHERE family_id=? ORDER BY created_at,id', (family_id,)).fetchall()
+            connected = {row['plugin_id'] for row in db.execute('SELECT plugin_id FROM simulator_connections WHERE family_id=?', (family_id,))}
+            messages = db.execute('SELECT * FROM simulator_messages WHERE family_id=? ORDER BY created_at DESC LIMIT 80', (family_id,)).fetchall()
+            health = db.execute("""SELECT child_id,sample_type,start_at,end_at,value,unit FROM apple_health_samples
+                WHERE family_id=? AND substr(start_at,1,10)=? AND source='mom.life Simulator'""", (family_id, target_date)).fetchall()
+        profiles = [{"id": "parent", "name": parent["name"] if parent else "Sarah", "role": "adult"}]
+        profiles.extend({"id": child["id"], "name": child["name"], "role": "child"} for child in children)
         return {
             "profiles": profiles,
             "connections": [{"id": plugin_id, "connected": plugin_id in connected} for plugin_id in sorted(SIMULATED_PLUGINS)],
-            "messages": self.store.simulator_messages(family_id),
-            "health": self.health_summary(family_id),
+            "messages": [dict(row) for row in reversed(messages)],
+            "health": self._health_summary(target_date, health),
         }
 
     def connect(self, family_id, plugin_id):
@@ -96,6 +115,10 @@ class SimulatorService:
             params.append(child_id)
         with self.store._connect() as db:
             rows = db.execute(query, tuple(params)).fetchall()
+        return self._health_summary(target_date, rows)
+
+    @staticmethod
+    def _health_summary(target_date, rows):
         profiles = {}
         for row in rows:
             values = profiles.setdefault(row["child_id"], {})

@@ -71,14 +71,14 @@ def login(body: Login):
     valid_email = secrets.compare_digest(body.email.strip().lower().encode(), DEMO_EMAIL.encode())
     valid_password = secrets.compare_digest(body.password.encode(), DEMO_PASSWORD.encode())
     if valid_email and valid_password:
-        return {'token': sessions.create(), 'expires_in': SESSION_SECONDS}
+        return {'token': sessions.create(), 'family_id': 'sarah-family', 'expires_in': SESSION_SECONDS}
     account = families.account(body.email.strip().lower())
     try:
         if not account or not hasher.verify(account['password_hash'], body.password):
             raise HTTPException(401, 'Email or password is incorrect.')
     except VerifyMismatchError:
         raise HTTPException(401, 'Email or password is incorrect.')
-    return {'token': sessions.create(account['family_id']), 'expires_in': SESSION_SECONDS}
+    return {'token': sessions.create(account['family_id']), 'family_id': account['family_id'], 'expires_in': SESSION_SECONDS}
 
 
 @router.get('/session')
@@ -133,4 +133,4 @@ def register(body: Registration):
         family_id = families.register(name, email, hasher.hash(body.password))
     except UniqueViolation:
         raise HTTPException(409, 'An account with this email already exists.')
-    return {'token': sessions.create(family_id), 'expires_in': SESSION_SECONDS}
+    return {'token': sessions.create(family_id), 'family_id': family_id, 'expires_in': SESSION_SECONDS}

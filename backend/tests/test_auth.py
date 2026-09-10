@@ -9,6 +9,7 @@ def test_demo_login_revocation_and_expiry(auth_headers):
     assert client.get('/api/tasks?family_id=sarah-family').status_code == 401
     assert client.post('/api/auth/login', json={'email': auth.DEMO_EMAIL, 'password': 'wrong'}).status_code == 401
     response = client.post('/api/auth/login', json={'email': auth.DEMO_EMAIL, 'password': auth.DEMO_PASSWORD})
+    assert response.json()['family_id'] == 'sarah-family'
     token = response.json()['token']
     client.headers['Authorization'] = f'Bearer {token}'
     assert client.get('/api/auth/session').json()['family_id'] == 'sarah-family'

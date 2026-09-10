@@ -12,34 +12,46 @@ from plugins.namespaces import namespaces
 from app.plugin_service import PluginService
 from app.runtime_lock import acquire, release
 
+_ACTIVE_GOALS: set[str] = set()
+
 
 class GoalTaskManager:
     def __init__(self, store: TaskStore) -> None:
         self.store = store
-        self._workers: dict[str, asyncio.Task[None]] = {}
+        self._workers: dict[str, asyncio.Task[bool]] = {}
         self._revisions: dict[str, asyncio.Lock] = {}
+        self._capacity = asyncio.Semaphore(4)
 
-    async def start(self, family_id: str, goal_id: str) -> bool:
+    async def start(self, family_id: str, goal_id: str, *, known_active: bool = False) -> bool:
         existing = self._workers.get(goal_id)
-        if existing and not existing.done():
+        if (existing and not existing.done()) or goal_id in _ACTIVE_GOALS:
             return False
-        goal = self.store.get(family_id, goal_id)
-        if not goal:
-            raise ValueError("Goal not found.")
-        if goal["status"] != "active":
-            return False
-        lease = acquire(self.store.path,goal_id)
-        if lease is None:
-            return False
-        goal = self.store.get(family_id, goal_id)
-        if not goal or goal["status"] != "active":
-            release(lease)
-            return False
-        worker = asyncio.create_task(self._orchestrate(family_id, goal_id), name=f"mom-life-goal-{goal_id}")
+        if not known_active:
+            goal = self.store.get(family_id, goal_id)
+            if not goal:
+                raise ValueError("Goal not found.")
+            if goal["status"] != "active":
+                return False
+        _ACTIVE_GOALS.add(goal_id)
+        worker = asyncio.create_task(self._run_locked(family_id, goal_id), name=f"mom-life-goal-{goal_id}")
         self._workers[goal_id] = worker
-        worker.add_done_callback(lambda done: release(lease))
+        worker.add_done_callback(lambda done: _ACTIVE_GOALS.discard(goal_id))
         worker.add_done_callback(lambda done: self._workers.pop(goal_id, None) if self._workers.get(goal_id) is done else None)
         return True
+
+    async def _run_locked(self, family_id: str, goal_id: str) -> bool:
+        async with self._capacity:
+            lease = acquire(self.store.path, goal_id)
+            if lease is None:
+                return False
+            try:
+                goal = self.store.get(family_id, goal_id)
+                if not goal or goal["status"] != "active":
+                    return False
+                await self._orchestrate(family_id, goal_id)
+                return True
+            finally:
+                release(lease)
 
     async def stop(self, goal_id: str) -> None:
         worker = self._workers.get(goal_id)
@@ -53,20 +65,21 @@ class GoalTaskManager:
             if not goal:
                 raise ValueError("Goal not found.")
             await self.stop(goal_id)
-            lease = acquire(self.store.path,goal_id)
-            if lease is None:
-                raise ValueError("This goal is running in another backend process.")
-            try:
-                from app.browser_cleanup import discard_goal_browser_sessions
-                await discard_goal_browser_sessions(self.store,goal_id)
-                self.store.set_goal_state(goal_id, status="active")
-                await self._plan(family_id, self.store.get(family_id, goal_id), instruction)
-            except Exception as error:
-                self.store.set_goal_state(goal_id, run_state="failed", current_step=str(error))
-                self._publish(family_id, goal_id)
-                raise
-            finally:
-                release(lease)
+            async with self._capacity:
+                lease = acquire(self.store.path,goal_id)
+                if lease is None:
+                    raise ValueError("This goal is running in another backend process.")
+                try:
+                    from app.browser_cleanup import discard_goal_browser_sessions
+                    await discard_goal_browser_sessions(self.store,goal_id)
+                    self.store.set_goal_state(goal_id, status="active")
+                    await self._plan(family_id, self.store.get(family_id, goal_id), instruction)
+                except Exception as error:
+                    self.store.set_goal_state(goal_id, run_state="failed", current_step=str(error))
+                    self._publish(family_id, goal_id)
+                    raise
+                finally:
+                    release(lease)
             await self.start(family_id, goal_id)
 
     async def shutdown(self):
@@ -127,14 +140,25 @@ class GoalTaskManager:
             skill["connection_setup_required"] = [plugin_id for plugin_id in required if not states.get(plugin_id, {}).get("connected")]
         self.store.set_goal_state(str(goal["id"]), run_state="planning", current_step="Defining the work")
         self._publish(family_id, str(goal["id"]))
-        plan = await plan_goal(instruction or str(goal["text"]), str(goal["child_id"]), skills,
-                               existing_tasks=self.store.assignments(str(goal["id"])))
+        request = str(goal["text"])
+        if instruction:
+            request = f"Original family outcome:\n{request}\n\nRevision information:\n{instruction}"
         valid = {str(skill["id"]):skill for skill in skills}
-        for operation in plan.operations:
-            operation.skill_ids = _resolve_skill_ids(operation.skill_ids, skills)
-            if any(identity not in valid or not valid[identity]["available"] for identity in operation.skill_ids):
-                raise ValueError("The planner selected an unknown or unavailable skill.")
-        self.store.apply_plan(family_id,str(goal["id"]),plan.operations)
+        ledger = self.store.assignments(str(goal["id"]))
+        plan_request = request
+        for attempt in range(2):
+            plan = await plan_goal(plan_request, str(goal["child_id"]), skills, existing_tasks=ledger)
+            try:
+                for operation in plan.operations:
+                    operation.skill_ids = _resolve_skill_ids(operation.skill_ids, skills)
+                    if any(identity not in valid or not valid[identity]["available"] for identity in operation.skill_ids):
+                        raise ValueError("The planner selected an unknown or unavailable skill.")
+                self.store.apply_plan(family_id,str(goal["id"]),plan.operations)
+                break
+            except ValueError as error:
+                if attempt:
+                    raise
+                plan_request = f"{request}\n\nCorrect the plan using the existing task ledger. The prior plan was invalid: {error}"
         assignments = self.store.assignments(str(goal["id"]))
         selected = list(dict.fromkeys(identity for item in assignments if item["status"] != "cancelled" for identity in item["skill_ids"]))
         plugins = list(dict.fromkeys(identity for skill_id in selected for identity in valid[skill_id]["required_plugin_ids"]))

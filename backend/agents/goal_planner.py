@@ -1,4 +1,5 @@
 import json
+import re
 from typing import Literal
 
 import boto3
@@ -7,6 +8,7 @@ from strands import Agent
 from strands.models import BedrockModel
 
 from app.config import Settings, get_settings
+from agents.invocation import invoke
 
 
 class AssignmentPlan(BaseModel):
@@ -29,7 +31,7 @@ PLANNER_PROMPT = """You are mom.life's goal planner. Convert one family outcome 
 
 Keep research together with the action that consumes it. Split work only when a later assignment requires a separately verifiable output from an earlier assignment. Select only listed skills whose available field is true. When connection_setup_required is nonempty, preserve the requested outcome and instruct the worker to request missing access; do not invent an alternative outcome. Never invent a plugin, fact, person, date, recipient, or identifier. Preserve the request's wording and child scope.
 
-Every assignment needs a complete operational instruction and exact, observable expected outputs. Money, consent, medical judgment, important messages, irreversible submissions, and meaningful schedule changes must be prepared and presented for Mom's approval before action. Read the existing task ledger first. Create, reuse, update, steer, retry, or cancel assignments. Preserve completed work and task identity. Retry the same failed task with a corrected instruction informed by its failure evidence. Do not create duplicate outcomes. Each create needs a unique key; dependencies reference earlier keys or existing task IDs. Keep unrelated assignments independent. Revision instructions must be complete. Return only the structured plan."""
+Every assignment needs a complete operational instruction and exact, observable expected outputs. When the request gives an exact output name, preserve that label verbatim; never expand, explain, or rename it. The user's requested outcome and constraints are the authorization for that work. Ask Mom only when a necessary choice, identity, recipient, amount, consent decision, medical judgment, or other consequential detail is genuinely missing or ambiguous. Read the existing task ledger first. Create, reuse, update, steer, retry, or cancel assignments. Preserve completed work and task identity. Retry the same failed task with a corrected instruction informed by its failure evidence. Do not create duplicate outcomes. Each create needs a unique key; dependencies reference earlier keys or existing task IDs. Keep unrelated assignments independent. Revision instructions must be complete. Return only the structured plan."""
 
 
 async def plan_goal(request: str, child_id: str, skills: list[dict[str, object]], settings: Settings | None = None, existing_tasks: list[dict] | None = None) -> GoalPlan:
@@ -37,12 +39,41 @@ async def plan_goal(request: str, child_id: str, skills: list[dict[str, object]]
     session = boto3.Session(profile_name=config.aws_profile or None, region_name=config.strands_region)
     agent = Agent(
         name="mom_life_goal_planner",
-        model=BedrockModel(boto_session=session, model_id=config.strands_model_id, temperature=0.1),
+        model=BedrockModel(boto_session=session, model_id=config.strands_model_id, temperature=0.1, max_tokens=config.model_max_tokens, service_tier=config.model_service_tier),
         system_prompt=PLANNER_PROMPT,
         structured_output_model=GoalPlan,
         callback_handler=None,
     )
-    result = await agent.invoke_async(json.dumps({"request": request, "child_id": child_id, "available_skills": skills, "task_ledger": existing_tasks or []}))
+    result = await invoke(agent, json.dumps({"request": request, "child_id": child_id, "available_skills": skills, "task_ledger": existing_tasks or []}), config.model_timeout_seconds)
     if not isinstance(result.structured_output, GoalPlan):
         raise RuntimeError("The goal planner did not return a valid assignment plan.")
+    _preserve_requested_output_labels(request, result.structured_output)
     return result.structured_output
+
+
+def _preserve_requested_output_labels(request: str, plan: GoalPlan) -> None:
+    labels = []
+    for match in re.finditer(r"\boutputs?\s+named(?:\s+exactly)?\s+([^\n.]+)", request, re.IGNORECASE):
+        segment = match.group(1).strip()
+        quoted = re.findall(r"['\"]([^'\"]+)['\"]", segment)
+        values = quoted or [segment.strip(" '\"")]
+        labels.extend(value for value in values if value)
+    for label in dict.fromkeys(labels):
+        exact = any(label in operation.expected_outputs for operation in plan.operations)
+        if exact:
+            continue
+        for operation in plan.operations:
+            for index, output in enumerate(operation.expected_outputs):
+                if output.casefold().startswith(label.casefold()):
+                    operation.expected_outputs[index] = label
+                    break
+            else:
+                continue
+            break
+        else:
+            words = set(re.findall(r"[a-z0-9]+", label.casefold()))
+            target = max(
+                plan.operations,
+                key=lambda operation: len(words & set(re.findall(r"[a-z0-9]+", f"{operation.title} {operation.instruction}".casefold()))),
+            )
+            target.expected_outputs.append(label)

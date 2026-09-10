@@ -41,15 +41,17 @@ def test_education_agent_updates_natural_language_snapshot(tmp_path, monkeypatch
         def __init__(self, **kwargs):
             self.tools = {item.tool_name: item for item in kwargs["tools"]}
 
-        async def stream_async(self, prompt):
-            context = self.tools["read_education_context"]()
+        def cancel(self):
+            pass
+
+        async def invoke_async(self, prompt):
+            context = await self.tools["read_education_context"]()
             assert context["incoming"]["source"] == "email"
             assert context["snapshots"] == []
-            skill = self.tools["read_education_snapshot_skill"]()
+            skill = await self.tools["read_education_snapshot_skill"]()
             assert skill["name"] == "Education Snapshot Maintenance"
-            self.tools["update_education_snapshot"]("child", "Amina is reading chapter books independently.")
-            self.tools["complete_education_review"]("The source confirms a meaningful change in Amina's reading.")
-            yield {}
+            await self.tools["update_education_snapshot"]("child", "Amina is reading chapter books independently.")
+            await self.tools["complete_education_review"]("The source confirms a meaningful change in Amina's reading.")
 
     monkeypatch.setattr(education_runtime, "Agent", Agent)
     monkeypatch.setattr(education_runtime, "BedrockModel", lambda **kwargs: None)
@@ -88,15 +90,17 @@ def test_education_agent_exposes_connected_provider_read_tools(tmp_path, monkeyp
         def __init__(self, **kwargs):
             self.tools = {item.tool_name: item for item in kwargs["tools"]}
 
-        async def stream_async(self, prompt):
-            context = self.tools["read_education_context"]()
+        def cancel(self):
+            pass
+
+        async def invoke_async(self, prompt):
+            context = await self.tools["read_education_context"]()
             assert context["connected_sources"] == ["google-classroom"]
             directory = await self.tools["list_education_source_tools"]("google-classroom")
             assert [item["name"] for item in directory] == ["list_courses"]
             result = await self.tools["read_education_source"]("google-classroom", "list_courses", {})
             assert result["courses"][0]["name"] == "Reading"
-            self.tools["complete_education_review"]("The source did not identify a known child.")
-            yield {}
+            await self.tools["complete_education_review"]("The source did not identify a known child.")
 
     monkeypatch.setattr(education_runtime, "PluginToolSession", ProviderSession)
     monkeypatch.setattr(education_runtime, "Agent", Agent)
@@ -141,4 +145,4 @@ def test_education_manager_recovers_unreviewed_evidence(tmp_path, monkeypatch):
     with store._connect() as connection:
         review = connection.execute("SELECT * FROM education_reviews WHERE incoming_id=?", (incoming["id"],)).fetchone()
     assert review is not None
-    manager.start.assert_awaited_once_with("family", review["id"])
+    manager.start.assert_awaited_once_with("family", review["id"], known_runnable=True)

@@ -8,20 +8,6 @@ class ProviderEvents:
     """Persist exact event subscriptions and deduplicate provider deliveries."""
     def __init__(self,store):
         self.store=store
-        with store._connect() as db:
-            db.executescript('''
-                CREATE TABLE IF NOT EXISTS provider_events (
-                    id TEXT PRIMARY KEY, family_id TEXT NOT NULL, plugin_id TEXT NOT NULL,
-                    correlation TEXT NOT NULL, payload TEXT NOT NULL, created_at TEXT NOT NULL,
-                    UNIQUE(family_id,plugin_id,id)
-                );
-                CREATE TABLE IF NOT EXISTS provider_waits (
-                    id TEXT PRIMARY KEY, goal_id TEXT NOT NULL REFERENCES family_tasks(id) ON DELETE CASCADE,
-                    assignment_id TEXT NOT NULL REFERENCES goal_assignments(id) ON DELETE CASCADE,
-                    family_id TEXT NOT NULL, plugin_id TEXT NOT NULL, correlation TEXT NOT NULL,
-                    state TEXT NOT NULL, created_at TEXT NOT NULL
-                );
-            ''')
 
     def wait(self,family_id,goal_id,assignment_id,plugin_id,correlation):
         if not correlation.strip():

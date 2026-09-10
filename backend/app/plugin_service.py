@@ -11,22 +11,24 @@ class PluginService:
         self.store = store
 
     def list(self, family_id):
-        installed = self.store.installed_plugins(family_id)
-        simulated = self.store.simulator_plugins(family_id)
         with self.store._connect() as db:
+            installed = {row['plugin_id'] for row in db.execute('SELECT plugin_id FROM plugin_installations WHERE family_id=?',(family_id,))}
+            simulated = {row['plugin_id'] for row in db.execute('SELECT plugin_id FROM simulator_connections WHERE family_id=?',(family_id,))}
             validated = {row['plugin_id']:row['validated_at'] for row in db.execute('SELECT * FROM plugin_connections WHERE family_id=?',(family_id,))}
+            permissions = {}
+            for row in db.execute('SELECT plugin_id,permission_id,enabled FROM plugin_permissions WHERE family_id=?',(family_id,)):
+                permissions.setdefault(row['plugin_id'], {})[row['permission_id']] = bool(row['enabled'])
         from plugins.oauth import OAuthConnections
         oauth = OAuthConnections(self.store)
-        identities = {plugin_id:oauth.identity(family_id,plugin_id) for plugin_id in installed}
-        authorized = {plugin_id:oauth.has_required_scopes(family_id,plugin_id) for plugin_id in installed}
-        return [{**plugin_snapshot(plugin,plugin.id in installed,self.store.permissions(family_id,plugin.id)),
-                 'connected':plugin.id in installed and authorized.get(plugin.id, True) and (plugin.id in validated or plugin.id in simulated),
+        oauth_states = oauth.connection_snapshots(family_id, installed)
+        return [{**plugin_snapshot(plugin,plugin.id in installed,permissions.get(plugin.id, {})),
+                 'connected':plugin.id in installed and oauth_states.get(plugin.id, {}).get('authorized', plugin.id not in {'google-workspace','google-classroom'}) and (plugin.id in validated or plugin.id in simulated),
                  'connection_mode':'simulated' if plugin.id in simulated else ('live' if plugin.id in validated else None),
                  'simulation_supported':plugin.id in {'whatsapp','apple-health','fitbit','withings','instacart'},
                  'validated_at':validated.get(plugin.id),
-                 'account_label': (identities.get(plugin.id) or {}).get('email'),
-                 'account_name': (identities.get(plugin.id) or {}).get('name'),
-                 'account_picture': (identities.get(plugin.id) or {}).get('picture'),
+                 'account_label': ((oauth_states.get(plugin.id, {}).get('identity') or {}).get('email')),
+                 'account_name': ((oauth_states.get(plugin.id, {}).get('identity') or {}).get('name')),
+                 'account_picture': ((oauth_states.get(plugin.id, {}).get('identity') or {}).get('picture')),
                  'setup_fields': self.setup_fields(plugin.id)} for plugin in PLUGINS]
 
     async def validate(self, family_id, plugin_id):

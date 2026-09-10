@@ -1,4 +1,4 @@
-"""Exercise the real planner ledger, worker tools, approval and resumed completion."""
+"""Exercise the real planner ledger, worker tools, and verified completion."""
 import asyncio
 from types import SimpleNamespace
 
@@ -8,13 +8,13 @@ from app.event_stream import family_events
 from app.task_store import TaskStore
 
 
-def test_goal_to_approval_to_verified_result(tmp_path,monkeypatch):
+def test_goal_to_verified_result(tmp_path,monkeypatch):
     from app import goal_tasks
     from agents import goal_worker
     store=TaskStore(tmp_path/'flow.db')
     goal=store.create('family','child','Send a school-trip update')
     store.install_plugin('family','whatsapp')
-    skill=SimpleNamespace(name='Family update',description='Send a message',instructions='Send the approved update.',required_plugin_ids=['whatsapp'])
+    skill=SimpleNamespace(name='Family update',description='Send a message',instructions='Send the requested update.',required_plugin_ids=['whatsapp'])
     skill_id=store.save_skill('family',skill)
     async def plan(*args,**kwargs):
         return GoalPlan(operations=[AssignmentPlan(action='create',key='message',title='Send update',instruction='Send the requested WhatsApp update.',expected_outputs=['Sent message'],skill_ids=[skill_id])])
@@ -36,16 +36,14 @@ def test_goal_to_approval_to_verified_result(tmp_path,monkeypatch):
     class Agent:
         def __init__(self,**kwargs):
             self.tools={item.tool_name:item for item in kwargs['tools']}
-        async def stream_async(self,prompt):
+        def cancel(self):
+            pass
+        async def invoke_async(self,prompt):
             await self.tools['update_progress']('Checked the school-trip request', 30, 'Prepare the update', 'checking')
-            yield {}
             await self.tools['load_goal_tools'](['whatsapp'])
-            yield {}
             result=await self.tools['call_plugin']('whatsapp','send_text',{'to':'254700000000','text':'Please review the school-trip supplies.'})
-            yield {}
             if result['status']=='success':
-                self.tools['complete_assignment']('Update sent','Observed provider message ID message-proof-1',[{'name':'Sent message','evidence':'WhatsApp returned message-proof-1'}])
-                yield {}
+                self.tools['complete_assignment']('Update sent','Observed provider message ID message-proof-1',[{'Sent message':'WhatsApp returned message-proof-1'}])
     monkeypatch.setattr(goal_worker,'Agent',Agent)
     monkeypatch.setattr(goal_worker,'BedrockModel',lambda **kwargs:None)
     async def run():
@@ -53,22 +51,13 @@ def test_goal_to_approval_to_verified_result(tmp_path,monkeypatch):
         other_queue = family_events.subscribe('other-family')
         manager=GoalTaskManager(store)
         await manager._orchestrate('family',goal['id'])
-        blocked=store.get('family',goal['id'])
-        assert blocked['run_state']=='blocked'
-        assert calls==[]
-        updates = [item for item in blocked['activities'] if item['kind'] == 'worker_update']
-        assert updates[0]['summary'] == 'Checked the school-trip request'
-        assert updates[0]['evidence']['assignment_id'] == blocked['assignments'][0]['id']
-        question=blocked['questions'][0]
-        assert question['action']['arguments']['to']=='254700000000'
-        assignment_id=blocked['assignments'][0]['id']
-        store.answer_question('family',goal['id'],question['id'],'Approved',True)
-        await manager._orchestrate('family',goal['id'])
         final=store.get('family',goal['id'])
         assert final['status']=='completed'
-        assert final['assignments'][0]['id']==assignment_id
         assert len(calls)==1
-        assert final['questions'][0]['state']=='consumed'
+        updates = [item for item in final['activities'] if item['kind'] == 'worker_update']
+        assert updates[0]['summary'] == 'Checked the school-trip request'
+        assert updates[0]['evidence']['assignment_id'] == final['assignments'][0]['id']
+        assert final['questions'] == []
         assert any(event['kind']=='tool_result' for event in final['activities'])
         assert final['assignments'][0]['evidence']['outputs'][0]['name']=='Sent message'
         assert not queue.empty()

@@ -49,7 +49,7 @@ def create_mom_life_agent(session_id: str, tool_events: ToolEventRecorder | None
         agent_id="mom-life",
         callback_handler=None,
         hooks=[tool_events] if tool_events else None,
-        model=BedrockModel(boto_session=boto_session, model_id=config.strands_model_id, temperature=0.2),
+        model=BedrockModel(boto_session=boto_session, model_id=config.strands_model_id, temperature=0.2, max_tokens=config.model_max_tokens, service_tier=config.model_service_tier),
         name="mom.life",
         session_manager=FileSessionManager(session_id=session_id, storage_dir=str(SESSION_DIRECTORY)),
         system_prompt=SYSTEM_PROMPT,

@@ -1,6 +1,7 @@
 "use client";
 import { useFamily } from "../components/FamilyProvider";
 import { useEffect, useRef, useState } from "react";
+import { subscribeFamilyEvents } from "../lib/familyEvents";
 import type { FamilyTask } from "../types/goals";
 export type { FamilyTask } from "../types/goals";
 
@@ -22,18 +23,19 @@ export function useFamilyTasks() {
       } catch (cause) { if (active) setError(cause instanceof Error ? cause.message : "Could not load tasks."); }
       finally { if (active) setLoaded(true); }
     }
-    const events = new EventSource("/api/tasks/events");
-    events.onmessage = () => { void refresh(); };
-    events.onerror = () => { if (active) setError("Live task updates are disconnected. Reconnecting…"); };
+    const unsubscribe = subscribeFamilyEvents({
+      onEvent: (event) => { if (event.type === "goals_changed") void refresh(); },
+      onConnection: (connected) => { if (active) connected ? void refresh() : setError("Live task updates are disconnected. Reconnecting…"); },
+    });
     void refresh();
-    return () => { active = false; events.close(); };
+    return () => { active = false; unsubscribe(); };
   }, []);
   function accept(task: FamilyTask) { revisionRef.current++; setTasks((current) => [task, ...current.filter((item) => item.id !== task.id)]); }
   async function createTask(childId: string, text: string) { accept(await requestTask("/api/tasks", "POST", { family_id: family.id, child_id: childId, text })); }
   async function setTaskStatus(id: string, status: FamilyTask["status"]) { accept(await requestTask(`/api/tasks/${id}`, "PATCH", { status })); }
   async function deleteTask(id: string) { await requestTask(`/api/tasks/${id}`, "DELETE"); revisionRef.current++; setTasks((current) => current.filter((item) => item.id !== id)); }
   async function reviseTask(id: string, instruction: string) { accept(await requestTask(`/api/tasks/${id}/revise`, "POST", { instruction })); }
-  async function answerQuestion(id: string, questionId: string, answer: string, approved: boolean) { accept(await requestTask(`/api/tasks/${id}/questions/${questionId}`, "POST", { answer, approved })); }
+  async function answerQuestion(id: string, questionId: string, answer: string) { accept(await requestTask(`/api/tasks/${id}/questions/${questionId}`, "POST", { answer })); }
   return { createTask, deleteTask, error, loaded, setTaskStatus, tasks, reviseTask, answerQuestion };
 }
 async function requestTask(path: string, method: string, body?: object) {

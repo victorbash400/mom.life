@@ -14,6 +14,7 @@ class SecurityAgentManager:
     def __init__(self, store: TaskStore) -> None:
         self.store = store
         self._tasks: dict[str, asyncio.Task[None]] = {}
+        self._capacity = asyncio.Semaphore(4)
 
     async def recover(self) -> None:
         with self.store._connect() as connection:
@@ -22,37 +23,43 @@ class SecurityAgentManager:
             await self.start(str(row["family_id"]), str(row["id"]))
 
     async def receive(self, family_id: str, incoming_id: str) -> tuple[dict[str, object], bool]:
-        review, created = self.store.receive_security_review(family_id, incoming_id)
+        review, created = await asyncio.to_thread(self.store.receive_security_review, family_id, incoming_id)
         if created:
-            await self.start(family_id, str(review["id"]))
+            await self.start(family_id, str(review["id"]), known_runnable=True)
         return review, created
 
-    async def start(self, family_id: str, review_id: str) -> bool:
+    async def start(self, family_id: str, review_id: str, *, known_runnable: bool = False) -> bool:
         current = self._tasks.get(review_id)
         if current and not current.done():
             return False
-        review = self.store.security_review(review_id, family_id)
-        if not review or review["status"] not in {"queued", "processing", "failed"}:
-            return False
-        lease = acquire(self.store.path, f"security-{review_id}")
-        if lease is None:
-            return False
-        review = self.store.security_review(review_id, family_id)
-        if not review or review["status"] not in {"queued", "processing", "failed"}:
-            release(lease)
-            return False
-        if review["status"] == "processing":
-            self.store.set_security_review(review_id, status="queued")
-        task = asyncio.create_task(self._run(family_id, review_id), name=f"mom-life-security-{review_id}")
+        if not known_runnable:
+            review = await asyncio.to_thread(self.store.security_review, review_id, family_id)
+            if not review or review["status"] not in {"queued", "processing", "failed"}:
+                return False
+        task = asyncio.create_task(self._run_locked(family_id, review_id), name=f"mom-life-security-{review_id}")
         self._tasks[review_id] = task
 
         def finished(done) -> None:
-            release(lease)
             if self._tasks.get(review_id) is done:
                 self._tasks.pop(review_id, None)
 
         task.add_done_callback(finished)
         return True
+
+    async def _run_locked(self, family_id: str, review_id: str) -> None:
+        async with self._capacity:
+            lease = await asyncio.to_thread(acquire, self.store.path, f"security-{review_id}")
+            if lease is None:
+                return
+            try:
+                review = await asyncio.to_thread(self.store.security_review, review_id, family_id)
+                if not review or review["status"] not in {"queued", "processing", "failed"}:
+                    return
+                if review["status"] == "processing":
+                    await asyncio.to_thread(self.store.set_security_review, review_id, status="queued")
+                await self._run(family_id, review_id)
+            finally:
+                await asyncio.to_thread(release, lease)
 
     async def retry(self, family_id: str, review_id: str) -> dict[str, object]:
         review = self.store.security_review(review_id, family_id)
@@ -82,32 +89,38 @@ class SecurityAgentManager:
             task.cancel()
         await asyncio.gather(*tasks, return_exceptions=True)
 
+    async def stop(self, review_id: str) -> None:
+        task = self._tasks.pop(review_id, None)
+        if task and not task.done():
+            task.cancel()
+            await asyncio.gather(task, return_exceptions=True)
+
     async def _run(self, family_id: str, review_id: str) -> None:
-        settings = self.store.security_settings(family_id)
+        settings = await asyncio.to_thread(self.store.security_settings, family_id)
         if not settings["enabled"]:
-            self.store.set_security_review(
-                review_id,
-                status="completed",
-                action="ignore",
-                reason="Safety monitoring is turned off.",
-                processed_at=now(),
+            await asyncio.to_thread(
+                self.store.set_security_review, review_id, status="completed", action="ignore",
+                reason="Safety monitoring is turned off.", processed_at=now(),
             )
-            self.store.add_security_activity(review_id, "decision", "Safety monitoring is turned off.", {"action": "ignore"})
+            await asyncio.to_thread(
+                self.store.add_security_activity, review_id, "decision",
+                "Safety monitoring is turned off.", {"action": "ignore"},
+            )
             self._publish(family_id, review_id)
             return
-        self.store.set_security_review(review_id, status="processing", failure="")
-        self.store.add_security_activity(review_id, "started", "Safety Agent started reviewing the item.")
+        await asyncio.to_thread(self.store.set_security_review, review_id, status="processing", failure="")
+        await asyncio.to_thread(self.store.add_security_activity, review_id, "started", "Safety Agent started reviewing the item.")
         self._publish(family_id, review_id)
         try:
-            await asyncio.to_thread(asyncio.run, run_security_agent(self.store, family_id, review_id))
+            await run_security_agent(self.store, family_id, review_id)
             self._publish(family_id, review_id)
         except asyncio.CancelledError:
-            self.store.set_security_review(review_id, status="queued")
+            await asyncio.to_thread(self.store.set_security_review, review_id, status="queued")
             raise
         except Exception as error:
             message = str(error).strip() or type(error).__name__
-            self.store.set_security_review(review_id, status="failed", failure=message)
-            self.store.add_security_activity(review_id, "failed", message)
+            await asyncio.to_thread(self.store.set_security_review, review_id, status="failed", failure=message)
+            await asyncio.to_thread(self.store.add_security_activity, review_id, "failed", message)
             self._publish(family_id, review_id)
             logger.exception("security_agent review=%s status=failed", review_id)
 

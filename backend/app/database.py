@@ -55,10 +55,13 @@ class Connection:
             query = re.sub(r':([a-z_]+)', r'%(\1)s', query)
         return Cursor(self.connection.execute(query, params))
 
+    def executemany(self, query, params):
+        query = re.sub(r'\bREAL\b', 'DOUBLE PRECISION', query)
+        query = query.replace('?', '%s')
+        return Cursor(self.connection.executemany(query, params))
+
     def executescript(self, script):
-        for statement in script.split(';'):
-            if statement.strip():
-                self.execute(statement)
+        self.connection.execute(script)
 
 
 @contextmanager
@@ -76,7 +79,9 @@ def connect(target):
     if not str(target).startswith(('postgresql://', 'postgres://')):
         raise ValueError('MOM_LIFE_DATABASE_URL must be a PostgreSQL connection URL.')
     if target not in _pools:
-        _pools[target] = ConnectionPool(target, min_size=1, max_size=10, kwargs={'row_factory': dict_row}, open=True)
+        pool = ConnectionPool(target, min_size=4, max_size=10, kwargs={'row_factory': dict_row}, open=False)
+        pool.open(wait=True)
+        _pools[target] = pool
     with _pools[target].connection() as connection:
         yield Connection(connection)
 

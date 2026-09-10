@@ -50,13 +50,16 @@ def test_security_agent_uses_settings_and_records_one_decision(tmp_path, monkeyp
         def __init__(self, **kwargs):
             self.tools = {item.tool_name: item for item in kwargs["tools"]}
 
-        async def stream_async(self, prompt):
-            context = self.tools["read_security_context"]()
+        def cancel(self):
+            pass
+
+        async def invoke_async(self, prompt):
+            context = await self.tools["read_security_context"]()
             assert context["settings"]["alert_level"] == "all"
             assert context["incoming"]["source"] == "email"
-            skill = self.tools["read_security_monitoring_skill"]()
+            skill = await self.tools["read_security_monitoring_skill"]()
             assert skill["name"] == "Family Safety Monitoring"
-            self.tools["decide_security_action"](
+            await self.tools["decide_security_action"](
                 "alert",
                 "The message reports account access from a new device.",
                 severity="high",
@@ -64,7 +67,6 @@ def test_security_agent_uses_settings_and_records_one_decision(tmp_path, monkeyp
                 summary="New device accessed the school account",
                 child_id="child",
             )
-            yield {}
 
     monkeypatch.setattr(security_runtime, "Agent", Agent)
     monkeypatch.setattr(security_runtime, "BedrockModel", lambda **kwargs: None)

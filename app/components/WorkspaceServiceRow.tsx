@@ -7,7 +7,7 @@ export const workspaceServices = [
   { id: "google-workspace.0", name: "Gmail", icon: Mail, detail: "Read mail and prepare drafts" },
   { id: "google-workspace.1", name: "Google Drive", icon: HardDrive, detail: "Find and organize family files" },
   { id: "google-workspace.2", name: "Google Docs", icon: FileText, detail: "Read and update family documents" },
-  { id: "google-workspace.3", name: "Google Calendar", icon: CalendarDays, detail: "Read and manage approved family events" },
+  { id: "google-workspace.3", name: "Google Calendar", icon: CalendarDays, detail: "Read and manage requested family events" },
 ];
 
 export function WorkspaceServiceRow({ connected, disabled, index, onToggle, permission }: { connected: boolean; disabled: boolean; index: number; onToggle: () => void; permission: ToolPermission }) {

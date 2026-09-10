@@ -1,13 +1,14 @@
+import asyncio
 import json
 from typing import Literal
 
 import boto3
 from strands import Agent, tool
-from strands.hooks import BeforeToolCallEvent, HookRegistry
 from strands.models import BedrockModel
 from strands.tools.executors import SequentialToolExecutor
 
 from app.config import Settings, get_settings
+from agents.invocation import invoke
 from app.task_store import TaskStore, now
 
 
@@ -23,24 +24,11 @@ Follow the parent's alert level:
 The parent's free-form instructions refine those defaults. Call decide_security_action exactly once. Use ignore when the item does not cross the configured threshold. Use alert only when Mom should see a concise, evidence-grounded alert. Categories are descriptive, not a fixed taxonomy. End after the decision tool confirms completion."""
 
 
-class _StopAfterDecision:
-    def __init__(self, result: dict[str, object]) -> None:
-        self.result = result
-
-    def register_hooks(self, registry: HookRegistry) -> None:
-        registry.add_callback(BeforeToolCallEvent, self.before)
-
-    def before(self, event: BeforeToolCallEvent) -> None:
-        if self.result:
-            event.cancel_tool = "This safety review already has its final decision."
-
-
 async def run_security_agent(store: TaskStore, family_id: str, review_id: str, settings: Settings | None = None) -> dict[str, object]:
     result: dict[str, object] = {}
+    agent_ref: dict[str, Agent] = {}
 
-    @tool
-    def read_security_context() -> dict[str, object]:
-        """Read the original evidence, known family members, and saved parent safety settings."""
+    def security_context() -> dict[str, object]:
         review = store.security_review(review_id, family_id)
         if not review or not review["incoming"]:
             raise ValueError("The safety review source is unavailable.")
@@ -57,17 +45,24 @@ async def run_security_agent(store: TaskStore, family_id: str, review_id: str, s
         }
 
     @tool
-    def read_security_monitoring_skill() -> dict[str, object]:
+    async def read_security_context() -> dict[str, object]:
+        """Read the original evidence, known family members, and saved parent safety settings."""
+        return await asyncio.to_thread(security_context)
+
+    @tool
+    async def read_security_monitoring_skill() -> dict[str, object]:
         """Read the family's editable procedure for reviewing safety concerns."""
-        from app.skills import BUILTIN_SKILLS
-        store.seed_skills(family_id, BUILTIN_SKILLS)
-        skill = next((item for item in store.skills(family_id) if item["slug"] == "family-security-monitoring"), None)
+        def read():
+            from app.skills import BUILTIN_SKILLS
+            store.seed_skills(family_id, BUILTIN_SKILLS)
+            return next((item for item in store.skills(family_id) if item["slug"] == "family-security-monitoring"), None)
+        skill = await asyncio.to_thread(read)
         if not skill:
             raise ValueError("The Family Safety Monitoring skill is unavailable.")
         return {"name": skill["name"], "instructions": skill["instructions"]}
 
     @tool
-    def decide_security_action(
+    async def decide_security_action(
         action: Literal["ignore", "alert"],
         reason: str,
         severity: Literal["low", "moderate", "high", "critical"] = "low",
@@ -79,56 +74,41 @@ async def run_security_agent(store: TaskStore, family_id: str, review_id: str, s
         clean_reason = reason.strip()
         if not clean_reason:
             raise ValueError("The safety decision needs an evidence-based reason.")
-        review = store.security_review(review_id, family_id)
-        if not review or review["status"] != "processing":
-            raise ValueError("This safety review is not available for a decision.")
         selected_child = child_id.strip()
-        if selected_child and selected_child != "all":
-            from app.auth import families
-            if not families.child(family_id, selected_child):
-                raise ValueError("Select a known child or all-family scope.")
         clean_summary = summary.strip()
         if action == "alert" and not clean_summary:
             raise ValueError("A safety alert needs a concise summary.")
-        store.set_security_review(
-            review_id,
-            status="completed",
-            action=action,
-            severity=severity if action == "alert" else "",
-            category=category.strip() if action == "alert" else "",
-            summary=clean_summary if action == "alert" else "",
-            reason=clean_reason,
-            child_id=selected_child,
-            failure="",
-            processed_at=now(),
-        )
-        store.add_security_activity(
-            review_id,
-            "decision",
-            clean_reason,
-            {"action": action, "severity": severity, "category": category.strip(), "child_id": selected_child},
-        )
+        def decide():
+            review = store.security_review(review_id, family_id)
+            if not review or review["status"] != "processing":
+                raise ValueError("This safety review is not available for a decision.")
+            if selected_child and selected_child != "all":
+                from app.auth import families
+                if not families.child(family_id, selected_child):
+                    raise ValueError("Select a known child or all-family scope.")
+            store.set_security_review(review_id, status="completed", action=action,
+                severity=severity if action == "alert" else "", category=category.strip() if action == "alert" else "",
+                summary=clean_summary if action == "alert" else "", reason=clean_reason,
+                child_id=selected_child, failure="", processed_at=now())
+            store.add_security_activity(review_id, "decision", clean_reason,
+                {"action": action, "severity": severity, "category": category.strip(), "child_id": selected_child})
+        await asyncio.to_thread(decide)
         result.update(action=action, severity=severity, child_id=selected_child)
+        agent_ref["agent"].cancel()
         return {"status": "completed", **result}
 
     config = settings or get_settings()
     session = boto3.Session(profile_name=config.aws_profile or None, region_name=config.strands_region)
     agent = Agent(
         name="mom_life_safety_agent",
-        model=BedrockModel(boto_session=session, model_id=config.strands_model_id, temperature=0.1),
+        model=BedrockModel(boto_session=session, model_id=config.strands_model_id, temperature=0.1, max_tokens=config.model_max_tokens, service_tier=config.model_service_tier),
         system_prompt=SECURITY_PROMPT,
         tools=[read_security_context, read_security_monitoring_skill, decide_security_action],
-        hooks=[_StopAfterDecision(result)],
         tool_executor=SequentialToolExecutor(),
         callback_handler=None,
     )
-    stream = agent.stream_async(json.dumps({"family_id": family_id, "review_id": review_id}))
-    try:
-        async for _ in stream:
-            if result:
-                break
-    finally:
-        await stream.aclose()
+    agent_ref["agent"] = agent
+    await invoke(agent, json.dumps({"family_id": family_id, "review_id": review_id}), config.model_timeout_seconds)
     if not result:
         raise RuntimeError("The Safety Agent stopped without recording a decision.")
     return result

@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
+import { subscribeFamilyEvents } from "../lib/familyEvents";
 
 import type { IncomingItem } from "../types/intake";
 
@@ -41,13 +42,11 @@ export function useIncomingItems() {
 
   useEffect(() => {
     const frame = requestAnimationFrame(() => void refresh());
-    const events = new EventSource("/api/tasks/events");
-    events.onmessage = (message) => {
-      const event = JSON.parse(message.data) as { type?: string };
-      if (event.type === "intake_changed") void refresh();
-    };
-    events.onerror = () => { setError("Live intake updates are disconnected. Reconnecting…"); };
-    return () => { cancelAnimationFrame(frame); events.close(); };
+    const unsubscribe = subscribeFamilyEvents({
+      onEvent: (event) => { if (event.type === "intake_changed") void refresh(); },
+      onConnection: (connected) => { connected ? void refresh() : setError("Live intake updates are disconnected. Reconnecting…"); },
+    });
+    return () => { cancelAnimationFrame(frame); unsubscribe(); };
   }, [refresh]);
 
   return { error, items, loaded, remove, retry };

@@ -45,7 +45,7 @@ class ApiAdapter:
                     definition('read_sleep','Read a daily Withings sleep summary.',date)]
         if not setting(self.prefix+'_PHONE_NUMBER_ID') or not setting(self.prefix+'_API_VERSION'):
             raise RuntimeError('Configure the WhatsApp business phone number ID and supported Graph API version.')
-        return [definition('send_text','Send an approved WhatsApp Business reply within the permitted customer-service window.',{'to':field('to','Recipient international phone number'),'text':field('text','Exact approved message')},True)]
+        return [definition('send_text','Send a requested WhatsApp Business reply within the permitted customer-service window.',{'to':field('to','Recipient international phone number'),'text':field('text','Exact requested message')},True)]
 
     async def call(self, name, arguments):
         specs = {item['name']:item for item in self.directory()}

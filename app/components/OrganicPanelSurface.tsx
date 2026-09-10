@@ -11,9 +11,9 @@ export function OrganicPanelSurface({ mode }: { mode: PanelMode }) {
     <svg className={styles.surface} viewBox="0 0 1112 718" preserveAspectRatio="none" aria-hidden="true">
       <defs>
         <linearGradient id="panel-fill" x1="0" y1="0" x2="1" y2="1">
-          <stop offset="0" stopColor={light ? "#fff" : "#fffaf4"} stopOpacity={light ? ".97" : ".9"} />
-          <stop offset=".55" stopColor={light ? "#fffdfa" : "#fff7ef"} stopOpacity={light ? ".95" : ".81"} />
-          <stop offset="1" stopColor={light ? "#fffaf7" : "#fcefe8"} stopOpacity={light ? ".96" : ".86"} />
+          <stop className={styles.stop} offset="0" stopColor={light ? "#fff" : "#fffaf4"} stopOpacity={light ? ".97" : ".9"} />
+          <stop className={styles.stop} offset=".55" stopColor={light ? "#fffdfa" : "#fff7ef"} stopOpacity={light ? ".95" : ".81"} />
+          <stop className={styles.stop} offset="1" stopColor={light ? "#fffaf7" : "#fcefe8"} stopOpacity={light ? ".96" : ".86"} />
         </linearGradient>
         <filter id="panel-shadow" x="-15%" y="-15%" width="130%" height="140%">
           <feDropShadow dx="0" dy="19" stdDeviation="18" floodColor="#775144" floodOpacity=".13" />

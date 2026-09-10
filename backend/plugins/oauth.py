@@ -61,6 +61,7 @@ DYNAMIC_OAUTH_PROVIDERS = {
         'token_endpoint_auth_method':'client_secret_post',
     },
 }
+_INITIALIZED_DATABASES = set()
 
 
 class OAuthConnections:
@@ -76,20 +77,59 @@ class OAuthConnections:
             with os.fdopen(descriptor,'wb') as file:
                 file.write(Fernet.generate_key())
         self.cipher=Fernet(key_path.read_bytes())
-        with store._connect() as db:
-            db.executescript('''
-                CREATE TABLE IF NOT EXISTS oauth_attempts (
-                    state TEXT PRIMARY KEY, family_id TEXT NOT NULL, plugin_id TEXT NOT NULL,
-                    verifier TEXT NOT NULL, config TEXT NOT NULL, expires_at REAL NOT NULL
-                );
-                CREATE TABLE IF NOT EXISTS oauth_tokens (
-                    family_id TEXT NOT NULL, plugin_id TEXT NOT NULL, token TEXT NOT NULL,
-                    PRIMARY KEY(family_id,plugin_id)
-                );
-                CREATE TABLE IF NOT EXISTS oauth_clients (
-                    plugin_id TEXT PRIMARY KEY, config TEXT NOT NULL
-                );
-            ''')
+        target = str(store.database)
+        if target not in _INITIALIZED_DATABASES:
+            with store._connect() as db:
+                db.executescript('''
+                    CREATE TABLE IF NOT EXISTS oauth_attempts (
+                        state TEXT PRIMARY KEY, family_id TEXT NOT NULL, plugin_id TEXT NOT NULL,
+                        verifier TEXT NOT NULL, config TEXT NOT NULL, expires_at REAL NOT NULL
+                    );
+                    CREATE TABLE IF NOT EXISTS oauth_tokens (
+                        family_id TEXT NOT NULL, plugin_id TEXT NOT NULL, token TEXT NOT NULL,
+                        PRIMARY KEY(family_id,plugin_id)
+                    );
+                    CREATE TABLE IF NOT EXISTS oauth_clients (
+                        plugin_id TEXT PRIMARY KEY, config TEXT NOT NULL
+                    );
+                ''')
+            _INITIALIZED_DATABASES.add(target)
+
+    def connection_snapshots(self, family_id, plugin_ids):
+        if not plugin_ids:
+            return {}
+        with self.store._connect() as db:
+            rows = db.execute('SELECT plugin_id,token FROM oauth_tokens WHERE family_id=?',(family_id,)).fetchall()
+        snapshots = {}
+        for row in rows:
+            if row['plugin_id'] not in plugin_ids:
+                continue
+            tokens = json.loads(self.cipher.decrypt(row['token'].encode()))
+            snapshots[row['plugin_id']] = {
+                'identity': self._identity_from_tokens(tokens),
+                'authorized': self._has_required_scopes(row['plugin_id'], tokens),
+            }
+        return snapshots
+
+    @staticmethod
+    def _identity_from_tokens(tokens):
+        encoded=tokens.get('id_token')
+        if not encoded:
+            return None
+        try:
+            payload=encoded.split('.')[1]
+            payload += '=' * (-len(payload) % 4)
+            claims=json.loads(base64.urlsafe_b64decode(payload.encode()))
+        except (ValueError,IndexError,UnicodeDecodeError,binascii.Error,json.JSONDecodeError):
+            return None
+        return {key:claims.get(key) for key in ('email','name','picture') if claims.get(key)} or None
+
+    @staticmethod
+    def _has_required_scopes(plugin_id, tokens):
+        if plugin_id not in GOOGLE_PLUGINS:
+            return True
+        required=GOOGLE_WORKSPACE_SCOPES if plugin_id == 'google-workspace' else GOOGLE_CLASSROOM_SCOPES
+        return required.issubset(set(tokens.get('scope','').split()))
 
     def config(self,plugin_id):
         plugin_by_id(plugin_id)
@@ -237,16 +277,7 @@ class OAuthConnections:
         if not row:
             return None
         tokens=json.loads(self.cipher.decrypt(row['token'].encode()))
-        encoded=tokens.get('id_token')
-        if not encoded:
-            return None
-        try:
-            payload=encoded.split('.')[1]
-            payload += '=' * (-len(payload) % 4)
-            claims=json.loads(base64.urlsafe_b64decode(payload.encode()))
-        except (ValueError,IndexError,UnicodeDecodeError,binascii.Error,json.JSONDecodeError):
-            return None
-        return {key:claims.get(key) for key in ('email','name','picture') if claims.get(key)} or None
+        return self._identity_from_tokens(tokens)
 
     def has_required_scopes(self, family_id, plugin_id):
         if plugin_id not in GOOGLE_PLUGINS:
@@ -256,8 +287,7 @@ class OAuthConnections:
         if not row:
             return False
         tokens=json.loads(self.cipher.decrypt(row['token'].encode()))
-        required=GOOGLE_WORKSPACE_SCOPES if plugin_id == 'google-workspace' else GOOGLE_CLASSROOM_SCOPES
-        return required.issubset(set(tokens.get('scope','').split()))
+        return self._has_required_scopes(plugin_id, tokens)
 
     async def access_token(self,family_id,plugin_id):
         from app.runtime_lock import acquire, release

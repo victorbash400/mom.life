@@ -1,10 +1,10 @@
+import asyncio
 from datetime import date
 from uuid import uuid4
 
 from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel, Field
 
-from app.provider_events import ProviderEvents
 from app.simulator import SimulatorService
 
 
@@ -56,23 +56,23 @@ def disconnect(plugin_id: str, request: Request):
 @router.post("/whatsapp/messages", status_code=201)
 async def send_message(body: SimulatedMessage, request: Request):
     from app.auth import families
-    from app.main import family_events, goal_tasks, intake_agent, task_store
+    from app.main import education_agent, family_events, goal_tasks, intake_agent, security_agent, task_store
     family_id = request.state.family_id
-    if "whatsapp" not in task_store.simulator_plugins(family_id):
-        raise HTTPException(409, "Connect WhatsApp Simulator first.")
     profile = families.profile(family_id) if body.profile_id == "parent" else families.child(family_id, body.profile_id)
     if not profile:
         raise HTTPException(404, "Simulated family profile not found.")
     event_id = f"sim-wa-{uuid4()}"
     payload = {"id": event_id, "from": f"sim:{body.profile_id}", "text": {"body": body.text.strip()}, "simulated": True, "profile_id": body.profile_id}
-    received = ProviderEvents(task_store).receive_with_status(family_id, "whatsapp", event_id, f"sim:{body.profile_id}", payload)
-    task_store.add_simulator_message(family_id, body.profile_id, "incoming", body.text.strip(), event_id)
-    if not received["matched"] and not received["duplicate"]:
-        await intake_agent.receive(
-            family_id, "whatsapp", event_id, correlation=f"sim:{body.profile_id}", sender=f"{profile['name']} (Simulator)",
-            content=body.text.strip(), payload=payload,
-        )
-    for goal_id in received["goal_ids"]:
+    try:
+        routed = await asyncio.to_thread(task_store.receive_simulator_incoming, family_id, body.profile_id,
+            f"{profile['name']} (Simulator)", body.text.strip(), event_id, payload)
+    except ValueError as error:
+        raise HTTPException(409, str(error)) from error
+    if routed["created"]:
+        await intake_agent.start(family_id, str(routed["incoming_id"]), known_runnable=True)
+        await security_agent.start(family_id, str(routed["security_id"]), known_runnable=True)
+        await education_agent.start(family_id, str(routed["education_id"]), known_runnable=True)
+    for goal_id in routed["goal_ids"]:
         await goal_tasks.start(family_id, goal_id)
         family_events.publish(family_id, {"type": "goals_changed", "goal_id": goal_id})
     return {"status": "received", "event_id": event_id}

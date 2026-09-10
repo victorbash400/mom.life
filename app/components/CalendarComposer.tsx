@@ -18,5 +18,5 @@ export function CalendarComposer({ busy, connected, writable, onSubmit }: { busy
       setSubmitted(false);
     }
   }
-  return <form className={styles.composer} onSubmit={(event) => void submit(event)}><input aria-label="Calendar request" disabled={!writable || busy} onChange={(event) => { setText(event.target.value); setSubmitted(false); }} placeholder={writable ? "Add dinner Friday at 7" : connected ? "Reconnect Google Calendar in Connections" : "Connect Google Calendar"} value={text} /><button aria-label="Send Calendar request" disabled={!writable || busy || !text.trim()} type="submit"><ArrowUp aria-hidden="true" /></button>{submitted ? <small>Waiting for approval in Tasks</small> : null}</form>;
+  return <form className={styles.composer} onSubmit={(event) => void submit(event)}><input aria-label="Calendar request" disabled={!writable || busy} onChange={(event) => { setText(event.target.value); setSubmitted(false); }} placeholder={writable ? "Add dinner Friday at 7" : connected ? "Reconnect Google Calendar in Connections" : "Connect Google Calendar"} value={text} /><button aria-label="Send Calendar request" disabled={!writable || busy || !text.trim()} type="submit"><ArrowUp aria-hidden="true" /></button>{submitted ? <small>Working in Tasks</small> : null}</form>;
 }

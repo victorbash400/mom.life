@@ -38,7 +38,7 @@ class GoogleWorkspaceAdapter:
                 definition('read_doc','Read a Google document.',{'document_id':field('document_id','Google Docs document ID')}),
                 definition('append_text','Append text to a Google document.',{'document_id':field('document_id','Google Docs document ID'),'text':field('text','Text to append')},True),
             ]
-        create = definition('create_event','Create an approved Google Calendar event.',{
+        create = definition('create_event','Create a requested Google Calendar event.',{
             'title':field('title','Event title'),
             'start':field('start','RFC 3339 start date and time'),
             'end':field('end','RFC 3339 end date and time'),
@@ -53,7 +53,7 @@ class GoogleWorkspaceAdapter:
             definition('list_events','Read upcoming Google Calendar events.'),
             definition('get_event','Read one Google Calendar event.',{'event_id':field('event_id','Google Calendar event ID')}),
             create,
-            definition('delete_event','Remove an approved Google Calendar event.',{'event_id':field('event_id','Google Calendar event ID')},True),
+            definition('delete_event','Remove a requested Google Calendar event.',{'event_id':field('event_id','Google Calendar event ID')},True),
         ]
 
     async def call(self, name, arguments):
