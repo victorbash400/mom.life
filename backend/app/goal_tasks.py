@@ -31,6 +31,10 @@ class GoalTaskManager:
         lease = acquire(self.store.path,goal_id)
         if lease is None:
             return False
+        goal = self.store.get(family_id, goal_id)
+        if not goal or goal["status"] != "active":
+            release(lease)
+            return False
         worker = asyncio.create_task(self._orchestrate(family_id, goal_id), name=f"mom-life-goal-{goal_id}")
         self._workers[goal_id] = worker
         worker.add_done_callback(lambda done: release(lease))

@@ -22,7 +22,6 @@ class IntakeAgentManager:
     async def recover(self) -> None:
         with self.store._connect() as connection:
             rows = connection.execute("SELECT id,family_id FROM incoming_items WHERE status IN ('queued','processing')").fetchall()
-            connection.execute("UPDATE incoming_items SET status='queued' WHERE status='processing'")
         for row in rows:
             await self.start(str(row["family_id"]), str(row["id"]))
 
@@ -47,11 +46,17 @@ class IntakeAgentManager:
         if current and not current.done():
             return False
         item = self.store.incoming(incoming_id, family_id)
-        if not item or item["status"] not in {"queued", "failed"}:
+        if not item or item["status"] not in {"queued", "processing", "failed"}:
             return False
         lease = acquire(self.store.path, f"intake-{incoming_id}")
         if lease is None:
             return False
+        item = self.store.incoming(incoming_id, family_id)
+        if not item or item["status"] not in {"queued", "processing", "failed"}:
+            release(lease)
+            return False
+        if item["status"] == "processing":
+            self.store.set_incoming(incoming_id, status="queued")
         task = asyncio.create_task(self._run(family_id, incoming_id), name=f"mom-life-intake-{incoming_id}")
         self._tasks[incoming_id] = task
 

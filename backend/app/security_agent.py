@@ -18,7 +18,6 @@ class SecurityAgentManager:
     async def recover(self) -> None:
         with self.store._connect() as connection:
             rows = connection.execute("SELECT id,family_id FROM security_reviews WHERE status IN ('queued','processing')").fetchall()
-            connection.execute("UPDATE security_reviews SET status='queued' WHERE status='processing'")
         for row in rows:
             await self.start(str(row["family_id"]), str(row["id"]))
 
@@ -33,11 +32,17 @@ class SecurityAgentManager:
         if current and not current.done():
             return False
         review = self.store.security_review(review_id, family_id)
-        if not review or review["status"] not in {"queued", "failed"}:
+        if not review or review["status"] not in {"queued", "processing", "failed"}:
             return False
         lease = acquire(self.store.path, f"security-{review_id}")
         if lease is None:
             return False
+        review = self.store.security_review(review_id, family_id)
+        if not review or review["status"] not in {"queued", "processing", "failed"}:
+            release(lease)
+            return False
+        if review["status"] == "processing":
+            self.store.set_security_review(review_id, status="queued")
         task = asyncio.create_task(self._run(family_id, review_id), name=f"mom-life-security-{review_id}")
         self._tasks[review_id] = task
 

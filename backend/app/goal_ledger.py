@@ -72,6 +72,7 @@ class GoalLedger:
         from app.task_store import now
         action_json = json.dumps(action, sort_keys=True) if action else ''
         with self._connect() as db:
+            db.execute('BEGIN IMMEDIATE')
             existing = db.execute("SELECT id FROM goal_questions WHERE assignment_id=? AND question=? AND action=? AND state='open'", (assignment_id,question,action_json)).fetchone()
             if existing:
                 return existing['id']
@@ -82,6 +83,7 @@ class GoalLedger:
     def answer_question(self, family_id, goal_id, question_id, answer, approved=False):
         from app.task_store import now
         with self._connect() as db:
+            db.execute('BEGIN IMMEDIATE')
             row = db.execute('SELECT q.* FROM goal_questions q JOIN family_tasks g ON g.id=q.goal_id WHERE q.id=? AND q.goal_id=? AND g.family_id=?', (question_id,goal_id,family_id)).fetchone()
             if not row or row['state'] != 'open':
                 raise ValueError('Question is missing or already answered.')

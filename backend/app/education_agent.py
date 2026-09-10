@@ -25,7 +25,6 @@ class EducationAgentManager:
                 AND education_reviews.family_id=incoming_items.family_id
                 WHERE education_reviews.id IS NULL"""
             ).fetchall()
-            connection.execute("UPDATE education_reviews SET status='queued' WHERE status='processing'")
         for row in rows:
             await self.start(str(row["family_id"]), str(row["id"]))
         for row in unreviewed:
@@ -42,11 +41,17 @@ class EducationAgentManager:
         if current and not current.done():
             return False
         review = self.store.education_review(review_id, family_id)
-        if not review or review["status"] not in {"queued", "failed"}:
+        if not review or review["status"] not in {"queued", "processing", "failed"}:
             return False
         lease = acquire(self.store.path, f"education-{review_id}")
         if lease is None:
             return False
+        review = self.store.education_review(review_id, family_id)
+        if not review or review["status"] not in {"queued", "processing", "failed"}:
+            release(lease)
+            return False
+        if review["status"] == "processing":
+            self.store.set_education_review(review_id, status="queued")
         task = asyncio.create_task(self._run(family_id, review_id), name=f"mom-life-education-{review_id}")
         self._tasks[review_id] = task
 
