@@ -5,6 +5,7 @@ from types import SimpleNamespace
 from fastapi.testclient import TestClient
 
 from app.simulator import SimulatorService
+from app.plugin_service import PluginService
 from app.task_store import TaskStore
 from plugins.runtime import PluginToolSession
 
@@ -92,3 +93,33 @@ def test_health_simulator_route_updates_a_child_sample(tmp_path, monkeypatch, au
 
     assert response.status_code == 200
     assert response.json()["profiles"]["child"]["step_count"] == 6500
+
+
+def test_simulated_providers_are_connected_and_callable_by_assignments(tmp_path, monkeypatch):
+    from app import auth
+
+    store = TaskStore(tmp_path / "simulator.db")
+    families = Families()
+    monkeypatch.setattr(auth, "families", families)
+    service = SimulatorService(store, families)
+    for plugin_id in ("fitbit", "whatsapp", "instacart"):
+        service.connect("family", plugin_id)
+
+    states = {item["id"]: item for item in PluginService(store).list("family")}
+    assert states["fitbit"]["connection_mode"] == "simulated"
+    assert states["whatsapp"]["connected"] is True
+
+    fitbit = PluginToolSession(["fitbit"], store, "family")
+    asyncio.run(fitbit.load("fitbit"))
+    activity = asyncio.run(fitbit.call("fitbit", "read_daily_activity", {"child_id": "child", "date": date.today().isoformat()}, "activity"))
+    assert activity["data"]["samples"]
+
+    whatsapp = PluginToolSession(["whatsapp"], store, "family")
+    asyncio.run(whatsapp.load("whatsapp"))
+    asyncio.run(whatsapp.call("whatsapp", "send_text", {"to": "child", "text": "Your form is ready."}, "message"))
+    assert store.simulator_messages("family")[-1]["direction"] == "outgoing"
+
+    instacart = PluginToolSession(["instacart"], store, "family")
+    asyncio.run(instacart.load("instacart"))
+    result = asyncio.run(instacart.call("instacart", "prepare_shopping_list", {"items": "milk, apples"}, "shopping"))
+    assert result["data"]["action"] == "prepare_shopping_list"
