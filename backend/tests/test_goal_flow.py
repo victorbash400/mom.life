@@ -103,3 +103,31 @@ def test_builtin_skill_changes_replace_removed_plugin_dependencies(tmp_path):
     skill=store.skills('family')[0]
     assert skill['instructions']=='Current'
     assert skill['required_plugin_ids']==['google-workspace']
+
+
+def test_planner_can_select_an_unconnected_skill_by_slug(tmp_path, monkeypatch):
+    from app import goal_tasks
+
+    store = TaskStore(tmp_path / 'skill-reference.db')
+    goal = store.create('family', 'child', 'Complete the school trip permission form')
+
+    async def plan(*args, **kwargs):
+        skills = args[2]
+        school_skill = next(skill for skill in skills if skill['slug'] == 'school-notice-follow-through')
+        assert school_skill['available'] is True
+        assert school_skill['connection_setup_required'] == ['google-workspace']
+        return GoalPlan(operations=[AssignmentPlan(
+            action='create',
+            key='permission-form',
+            title='Prepare the permission form',
+            instruction='Prepare the school trip permission form and ask before submitting it.',
+            expected_outputs=['Prepared permission form'],
+            skill_ids=['school-notice-follow-through'],
+        )])
+
+    monkeypatch.setattr(goal_tasks, 'plan_goal', plan)
+    assignments = asyncio.run(GoalTaskManager(store)._plan('family', goal))
+    selected = assignments[0]['skill_ids'][0]
+    assert selected != 'school-notice-follow-through'
+    assert store.assignment(assignments[0]['id'])['skill_ids'] == [selected]
+    assert store.get('family', goal['id'])['plugin_ids'] == ['google-workspace']

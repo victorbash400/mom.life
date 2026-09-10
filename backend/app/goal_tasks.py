@@ -119,14 +119,15 @@ class GoalTaskManager:
         skills = self.store.skills(family_id)
         for skill in skills:
             required = list(skill["required_plugin_ids"])
-            skill["available"] = all(bool(states[plugin_id]["installed"]) for plugin_id in required)
-            skill["connection_setup_required"] = [identity for identity in required if not states[identity]["connected"]]
+            skill["available"] = all(plugin_id in states for plugin_id in required)
+            skill["connection_setup_required"] = [plugin_id for plugin_id in required if not states.get(plugin_id, {}).get("connected")]
         self.store.set_goal_state(str(goal["id"]), run_state="planning", current_step="Defining the work")
         self._publish(family_id, str(goal["id"]))
         plan = await plan_goal(instruction or str(goal["text"]), str(goal["child_id"]), skills,
                                existing_tasks=self.store.assignments(str(goal["id"])))
         valid = {str(skill["id"]):skill for skill in skills}
         for operation in plan.operations:
+            operation.skill_ids = _resolve_skill_ids(operation.skill_ids, skills)
             if any(identity not in valid or not valid[identity]["available"] for identity in operation.skill_ids):
                 raise ValueError("The planner selected an unknown or unavailable skill.")
         self.store.apply_plan(family_id,str(goal["id"]),plan.operations)
@@ -211,3 +212,26 @@ class GoalTaskManager:
     @staticmethod
     def _publish(family_id: str, goal_id: str) -> None:
         family_events.publish(family_id, {"type": "goals_changed", "goal_id": goal_id})
+
+
+def _resolve_skill_ids(references: list[str], skills: list[dict[str, object]]) -> list[str]:
+    aliases: dict[str, str | None] = {}
+    for skill in skills:
+        identity = str(skill["id"])
+        for value in (identity, skill.get("slug"), skill.get("name")):
+            if not value:
+                continue
+            alias = str(value).strip().casefold()
+            if alias not in aliases:
+                aliases[alias] = identity
+            elif aliases[alias] != identity:
+                aliases[alias] = None
+
+    resolved: list[str] = []
+    for reference in references:
+        identity = aliases.get(str(reference).strip().casefold())
+        if not identity:
+            raise ValueError("The planner selected a skill that is not in this family's library.")
+        if identity not in resolved:
+            resolved.append(identity)
+    return resolved
