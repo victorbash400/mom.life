@@ -1,0 +1,19 @@
+.device { display: grid; min-height: 0; overflow: hidden; grid-template-columns: 154px minmax(0,1fr); border: 6px solid #554c48; border-radius: 34px; background: #f8f6f4; box-shadow: inset 0 0 0 1px rgb(255 255 255 / 16%), 0 20px 46px rgb(64 45 38 / 18%); }
+.device > aside { padding: 22px 11px; border-right: 1px solid rgb(109 91 83 / 12%); background: linear-gradient(145deg, rgb(239 229 224 / 90%), rgb(231 218 212 / 72%)); }
+.device > aside > nav { display: grid; gap: 5px; }
+.device > aside > nav > button { display: grid; min-height: 45px; padding: 6px 8px; grid-template-columns: 30px 1fr; align-items: center; gap: 8px; border: 0; border-radius: 11px; color: #625650; background: transparent; font: inherit; text-align: left; cursor: pointer; }
+.device > aside > nav > button:hover { background: rgb(255 255 255 / 46%); }
+.device > aside > nav > button[aria-pressed="true"] { color: #403733; background: rgb(255 255 255 / 78%); box-shadow: 0 1px 4px rgb(72 54 47 / 7%); }
+.device > aside > nav > button > i { display: grid; width: 28px; height: 28px; place-items: center; border-radius: 8px; color: #fff; background: #ac665d; box-shadow: inset 0 1px rgb(255 255 255 / 25%), 0 2px 5px rgb(73 51 43 / 12%); }
+.device > aside > nav > button[data-app="whatsapp"] > i { background: #58a96c; }
+.device > aside > nav > button[data-app="health"] > i { background: #d96e79; }
+.device > aside > nav > button[data-app="connections"] > i { background: #7b72a0; }
+.device > aside > nav svg { width: 16px; height: 16px; stroke-width: 1.8; }
+.device > aside > nav span { font-size: 11px; font-weight: 560; }
+.device > main { display: grid; min-height: 0; grid-template-rows: 49px minmax(0,1fr); background: rgb(255 255 255 / 88%); }
+.device > main > header { display: flex; padding: 0 21px; align-items: center; gap: 8px; border-bottom: 1px solid #eee9e6; color: #453d39; }
+.device > main > header > svg { width: 16px; height: 16px; color: #9a625b; }
+.device > main > header strong { font-size: 12px; font-weight: 620; }
+.device > main > header small { margin-left: auto; color: #a0948e; font-size: 9px; }
+.content { min-height: 0; padding: 18px 21px 20px; overflow: hidden; }
+@media (max-width: 680px) { .device { grid-template-columns: 58px minmax(0,1fr); border-width: 4px; border-radius: 26px; }.device > aside { padding: 16px 7px; }.device > aside > nav > button { min-height: 44px; padding: 7px; grid-template-columns: 1fr; justify-items: center; }.device > aside > nav > button > span { display: none; }.content { padding: 14px; } }

@@ -1,0 +1,6 @@
+.workspace { position: absolute; inset: clamp(25px,4%,38px) clamp(32px,6%,72px); display: grid; min-height: 0; grid-template-rows: auto auto minmax(0,1fr); gap: 14px; color: #30302e; animation: workspace-in 360ms 70ms cubic-bezier(.22,1,.36,1) both; }
+.workspace > :last-child { grid-row: 3; }
+.error { margin: 0; color: #a43d38; font-size: 11px; }
+@keyframes workspace-in { from { opacity: 0; transform: translateY(12px) scale(.992); } to { opacity: 1; transform: none; } }
+@media (max-width: 680px) { .workspace { inset: 22px 20px 20px; } }
+@media (prefers-reduced-motion: reduce) { .workspace { animation: none; } }

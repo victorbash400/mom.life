@@ -22,6 +22,8 @@ export function useToolConnections() {
   async function validate(id: string) { try { await mutate(`/api/plugins/${id}/validate`, "POST"); } finally { await refresh(); } }
   async function permission(id: string, permissionId: string, enabled: boolean) { const response = await fetch(`/api/plugins/${id}/permissions`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ permission_id: permissionId, enabled }) }); if (!response.ok) throw new Error("Could not update permission."); await refresh(); }
   async function disconnect(id: string) { await mutate(`/api/plugins/${id}`, "DELETE"); await refresh(); }
-  return { connectedIds: states.filter((state) => state.connected).map((state) => state.id), installedIds: states.filter((state) => state.installed).map((state) => state.id), states, loaded, error, connect, disconnect, refresh, validate, permission, authorize };
+  async function simulate(id: string) { await mutate(`/api/simulator/connections/${id}`, "PUT"); await refresh(); }
+  async function disconnectSimulation(id: string) { await mutate(`/api/simulator/connections/${id}`, "DELETE"); await refresh(); }
+  return { connectedIds: states.filter((state) => state.connected).map((state) => state.id), installedIds: states.filter((state) => state.installed).map((state) => state.id), states, loaded, error, connect, disconnect, disconnectSimulation, refresh, simulate, validate, permission, authorize };
 }
-async function mutate(path: string, method: "POST" | "DELETE") { const response = await fetch(path, { method }); if (!response.ok) { const payload = await response.json().catch(() => ({})) as { error?: string }; throw new Error(payload.error || "Could not update this connection."); } }
+async function mutate(path: string, method: "POST" | "PUT" | "DELETE") { const response = await fetch(path, { method }); if (!response.ok) { const payload = await response.json().catch(() => ({})) as { error?: string }; throw new Error(payload.error || "Could not update this connection."); } }

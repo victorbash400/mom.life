@@ -3,7 +3,7 @@ import { Activity, Bot, CheckSquare2, GraduationCap, HeartPulse, Mail, MapPinned
 export type ToolGroup = "Family essentials" | "Education" | "Health and care" | "Planning" | "Shopping and home" | "Communication" | "Automation";
 export type ToolDefinition = { id: string; name: string; description: string; group: ToolGroup; color: string; icon: LucideIcon; permissions: string[]; setup: string };
 export type ToolPermission = { id: string; name: string; enabled: boolean };
-export type ToolState = { id: string; installed: boolean; connected: boolean; connection_supported: boolean; oauth_supported?: boolean; account_label?: string; account_name?: string; account_picture?: string; setup_message?: string; setup_fields?: { name: string; configured: boolean }[]; permissions: ToolPermission[] };
+export type ToolState = { id: string; installed: boolean; connected: boolean; connection_supported: boolean; connection_mode?: "live" | "simulated"; simulation_supported?: boolean; oauth_supported?: boolean; account_label?: string; account_name?: string; account_picture?: string; setup_message?: string; setup_fields?: { name: string; configured: boolean }[]; permissions: ToolPermission[] };
 
 export const toolGroups: ToolGroup[] = ["Family essentials", "Education", "Health and care", "Planning", "Shopping and home", "Communication", "Automation"];
 export const toolDirectory: ToolDefinition[] = [

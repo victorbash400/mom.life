@@ -6,7 +6,7 @@ const focusedPath = "M88 0 C258 0 386 12 556 12 C726 12 854 0 1024 0 C1073 0 111
 
 export function OrganicPanelSurface({ mode }: { mode: PanelMode }) {
   const path = mode === "home" ? homePath : focusedPath;
-  const light = mode === "plugins";
+  const light = mode === "plugins" || mode === "simulator";
   return (
     <svg className={styles.surface} viewBox="0 0 1112 718" preserveAspectRatio="none" aria-hidden="true">
       <defs>

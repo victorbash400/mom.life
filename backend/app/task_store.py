@@ -524,6 +524,12 @@ class TaskStore(GoalLedger):
         with self._connect() as connection:
             return {row[0] for row in connection.execute("SELECT plugin_id FROM simulator_connections WHERE family_id=?", (family_id,))}
 
+    def remove_simulator_profile(self, family_id: str, profile_id: str) -> None:
+        with self._connect() as connection:
+            connection.execute("DELETE FROM simulator_messages WHERE family_id=? AND profile_id=?", (family_id, profile_id))
+            if table_exists(connection, "apple_health_samples"):
+                connection.execute("DELETE FROM apple_health_samples WHERE family_id=? AND child_id=? AND source='mom.life Simulator'", (family_id, profile_id))
+
     def set_simulator_plugin(self, family_id: str, plugin_id: str, connected: bool) -> None:
         with self._connect() as connection:
             if connected:

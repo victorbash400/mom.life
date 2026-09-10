@@ -55,7 +55,7 @@ class SimulatorService:
                     "active_energy": (210 + seed % 170 + day_offset * 7, "kcal", start, start + timedelta(hours=12)),
                     "walking_running_distance": (2600 + seed % 2200 + day_offset * 41, "m", start, start + timedelta(hours=12)),
                     "heart_rate": (68 + seed % 18, "count/min", start + timedelta(hours=5), start + timedelta(hours=5, minutes=1)),
-                    "sleep_analysis": (8 + (seed % 8) / 10, "stage", datetime.combine(sample_date, time(0, 0), UTC), datetime.combine(sample_date, time(8, 0), UTC)),
+                    "sleep_analysis": (1, "stage", datetime.combine(sample_date, time(0, 0), UTC), datetime.combine(sample_date, time(0, 0), UTC) + timedelta(hours=8 + (seed % 8) / 10)),
                 }
                 for sample_type, (value, unit, begins, ends) in values.items():
                     samples.append(SimpleNamespace(
@@ -76,7 +76,7 @@ class SimulatorService:
             "active_energy": (active_energy, "kcal", start, start + timedelta(hours=12)),
             "walking_running_distance": (distance, "m", start, start + timedelta(hours=12)),
             "heart_rate": (heart_rate, "count/min", start + timedelta(hours=5), start + timedelta(hours=5, minutes=1)),
-            "sleep_analysis": (sleep_hours, "stage", datetime.combine(sample_date, time(0, 0), UTC), datetime.combine(sample_date, time(8, 0), UTC)),
+            "sleep_analysis": (1, "stage", datetime.combine(sample_date, time(0, 0), UTC), datetime.combine(sample_date, time(0, 0), UTC) + timedelta(hours=sleep_hours)),
         }
         samples = [SimpleNamespace(
             external_id=f"simulator:{child_id}:{sample_date.isoformat()}:{kind}", child_id=child_id, sample_type=kind,
@@ -88,7 +88,7 @@ class SimulatorService:
     def health_summary(self, family_id, child_id=None, sample_date=None):
         AppleHealthAdapter(family_id, self.store)
         target_date = (sample_date or date.today()).isoformat()
-        query = """SELECT child_id,sample_type,value,unit FROM apple_health_samples
+        query = """SELECT child_id,sample_type,start_at,end_at,value,unit FROM apple_health_samples
             WHERE family_id=? AND substr(start_at,1,10)=? AND source='mom.life Simulator'"""
         params = [family_id, target_date]
         if child_id:
@@ -98,7 +98,12 @@ class SimulatorService:
             rows = db.execute(query, tuple(params)).fetchall()
         profiles = {}
         for row in rows:
-            profiles.setdefault(row["child_id"], {})[row["sample_type"]] = row["value"]
+            values = profiles.setdefault(row["child_id"], {})
+            if row["sample_type"] == "sleep_analysis":
+                duration = (datetime.fromisoformat(row["end_at"]) - datetime.fromisoformat(row["start_at"])).total_seconds() / 3600
+                values["sleep_analysis"] = round(values.get("sleep_analysis", 0) + duration, 1)
+            else:
+                values[row["sample_type"]] = row["value"]
         return {"date": target_date, "profiles": profiles}
 
     @staticmethod

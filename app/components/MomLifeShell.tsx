@@ -9,9 +9,10 @@ import { useFamily } from "./FamilyProvider";
 import type { ParentSettingsView } from "./ParentSettingsWorkspace";
 import { useToolConnections } from "../hooks/useToolConnections";
 import { useSecurity } from "../hooks/useSecurity";
+import { useSimulator } from "../hooks/useSimulator";
 import styles from "./MomLifeShell.module.css";
 
-export type PanelMode = "home" | "ask" | "tasks" | "incoming" | "education" | "security" | "plugins" | "child" | "child-info" | "parent" | "parent-info" | "parent-settings" | "parent-tasks";
+export type PanelMode = "home" | "ask" | "tasks" | "incoming" | "education" | "security" | "plugins" | "simulator" | "child" | "child-info" | "parent" | "parent-info" | "parent-settings" | "parent-tasks";
 
 export function MomLifeShell() {
   const { family: { children } } = useFamily();
@@ -20,6 +21,7 @@ export function MomLifeShell() {
   const [parentSettingsView, setParentSettingsView] = useState<ParentSettingsView>("profile");
   const connections = useToolConnections();
   const security = useSecurity();
+  const simulator = useSimulator(connections.refresh);
   const visibleMode = (mode === "child" || mode === "child-info") && !children.some((child) => child.id === selectedChildId) ? "home" : mode;
   const selectedChild = children.find((child) => child.id === selectedChildId);
 
@@ -30,8 +32,9 @@ export function MomLifeShell() {
   function openEducation() { setSelectedChildId((current) => current ?? children[0]?.id); setMode("education"); }
   function openSecurity() { setSelectedChildId(undefined); setMode("security"); }
   function openPlugins() { setSelectedChildId(undefined); setMode("plugins"); }
+  function openSimulator() { setSelectedChildId(undefined); void simulator.refresh(); setMode("simulator"); }
   function changeMode(next: PanelMode) { if (next === "parent-settings") setParentSettingsView("profile"); setMode(next); }
   function returnHome() { setSelectedChildId(undefined); setMode("home"); }
 
-  return <main className={styles.shell} data-mode={visibleMode}><AppHeader educationOpen={visibleMode === "education"} incomingOpen={visibleMode === "incoming"} onChildrenOpen={openChildManagement} onEducationOpen={openEducation} onIncomingOpen={openIncoming} onProfileOpen={openParent} pluginsOpen={visibleMode === "plugins"} onPluginsOpen={openPlugins} onSecurityOpen={openSecurity} securityAlertCount={security.reviews.filter((review) => !review.dismissed).length} securityOpen={visibleMode === "security"} /><ChildSwitcher focused={mode === "child" || mode === "child-info" || mode === "education" || (mode === "tasks" && Boolean(selectedChild))} onSelect={selectChild} selectedId={selectedChildId} /><ActionPanel child={selectedChild} connections={connections} mode={visibleMode} onModeChange={changeMode} onReturnHome={returnHome} parentSettingsView={parentSettingsView} security={security} /></main>;
+  return <main className={styles.shell} data-mode={visibleMode}><AppHeader educationOpen={visibleMode === "education"} incomingOpen={visibleMode === "incoming"} onChildrenOpen={openChildManagement} onEducationOpen={openEducation} onIncomingOpen={openIncoming} onProfileOpen={openParent} pluginsOpen={visibleMode === "plugins"} onPluginsOpen={openPlugins} onSecurityOpen={openSecurity} onSimulatorOpen={openSimulator} securityAlertCount={security.reviews.filter((review) => !review.dismissed).length} securityOpen={visibleMode === "security"} simulatorOpen={visibleMode === "simulator"} /><ChildSwitcher focused={mode === "child" || mode === "child-info" || mode === "education" || (mode === "tasks" && Boolean(selectedChild))} onSelect={selectChild} selectedId={selectedChildId} /><ActionPanel child={selectedChild} connections={connections} mode={visibleMode} onModeChange={changeMode} onReturnHome={returnHome} parentSettingsView={parentSettingsView} security={security} simulator={simulator} /></main>;
 }

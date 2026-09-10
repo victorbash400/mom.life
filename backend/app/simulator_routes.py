@@ -81,6 +81,9 @@ async def send_message(body: SimulatedMessage, request: Request):
 @router.put("/health")
 def update_health(body: SimulatedHealth, request: Request):
     try:
-        return service().update_health(request.state.family_id, **body.model_dump())
+        return service().update_health(
+            request.state.family_id, body.child_id, body.date, body.steps, body.sleep_hours,
+            body.heart_rate, body.active_energy, body.distance,
+        )
     except ValueError as error:
         raise HTTPException(400, str(error)) from error

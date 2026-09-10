@@ -15,6 +15,7 @@
 .settings { border-top: 1px solid #ecece8; }
 .settings > header { display: flex; min-height: 64px; padding: 0 16px; align-items: center; justify-content: space-between; gap: 20px; }
 .settings > header > span { min-width: 0; }
+.settings > header > .actions { display: flex; min-width: auto; flex: 0 0 auto; gap: 7px; }
 .settings strong,.settings small { display: block; }
 .settings strong,.settings legend { color: #3a3a37; font-size: 11px; font-weight: 590; }
 .settings small { max-width: 530px; margin-top: 4px; color: #92928d; font-size: 10px; line-height: 1.45; }
@@ -23,6 +24,8 @@
 .settings header .connect:hover { background: #9f5d54; }
 .settings header .disconnect { border: 1px solid #cbb6af; color: #654e47; background: #e8d9d2; }
 .settings header .disconnect:hover { background: #decbc3; }
+.settings header .simulate { border: 1px solid #cbb6af; color: #654e47; background: #f3e9e4; }
+.settings header .simulate:hover { background: #e8d9d2; }
 .settings button:disabled { opacity: .45; cursor: default; }
 .settings fieldset { display: grid; margin: 0; padding: 14px 16px 16px; gap: 9px; border: 0; border-top: 1px solid #ecece8; }
 .settings legend { padding-top: 14px; }

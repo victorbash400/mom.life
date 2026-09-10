@@ -45,6 +45,10 @@ def add_child(body: ChildWrite, request: Request):
     family = request.state.family_id
     identity = families.add_child(family,body.name.strip(),body.birth_date)
     families.update_child(family,identity,body.model_dump(exclude={'name','birth_date'}))
+    from app.main import task_store
+    from app.simulator import HEALTH_PLUGINS, SimulatorService
+    if task_store.simulator_plugins(family) & HEALTH_PLUGINS:
+        SimulatorService(task_store, families).seed_health(family)
     return {'id':identity}
 
 
@@ -66,6 +70,7 @@ async def remove_child(identity: str, request: Request):
             await goal_tasks.stop(goal['id'])
             task_store.set_goal_state(goal['id'],status='paused',run_state='paused',current_step='Child profile removed')
     task_store.delete_education_snapshot(family, identity)
+    task_store.remove_simulator_profile(family, identity)
     families.remove_child(family,identity)
 
 
