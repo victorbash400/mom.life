@@ -12,25 +12,25 @@ export function useSecurity() {
     try {
       const response = await fetch("/api/security", { cache: "no-store" });
       const payload = await response.json() as SecuritySnapshot | { error?: string };
-      if (!response.ok || !("reviews" in payload)) throw new Error("error" in payload && payload.error || "Could not load security alerts.");
+      if (!response.ok || !("reviews" in payload)) throw new Error("error" in payload && payload.error || "Could not load safety alerts.");
       setSnapshot(payload);
       setError(undefined);
     } catch (reason) {
-      setError(reason instanceof Error ? reason.message : "Could not load security alerts.");
+      setError(reason instanceof Error ? reason.message : "Could not load safety alerts.");
     }
   }, []);
 
   const saveSettings = useCallback(async (settings: Pick<SecuritySettings, "enabled" | "alert_level" | "instructions">) => {
     const response = await fetch("/api/security/settings", { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify(settings) });
     const payload = await response.json() as SecuritySettings | { error?: string };
-    if (!response.ok || !("alert_level" in payload)) throw new Error("error" in payload && payload.error || "Could not save security settings.");
+    if (!response.ok || !("alert_level" in payload)) throw new Error("error" in payload && payload.error || "Could not save safety settings.");
     setSnapshot((current) => current ? { ...current, settings: payload } : current);
   }, []);
 
   const act = useCallback(async (reviewId: string, action: "retry" | "dismiss") => {
     const response = await fetch(`/api/security/reviews/${encodeURIComponent(reviewId)}/${action}`, { method: "POST" });
     const payload = await response.json() as { error?: string };
-    if (!response.ok) throw new Error(payload.error || `Could not ${action} the security review.`);
+    if (!response.ok) throw new Error(payload.error || `Could not ${action} the safety review.`);
     await refresh();
   }, [refresh]);
 
@@ -44,7 +44,7 @@ export function useSecurity() {
       const event = JSON.parse(message.data) as { type?: string };
       if (event.type === "security_changed") void refresh();
     };
-    events.onerror = () => setError("Live security updates are disconnected. Reconnecting…");
+    events.onerror = () => setError("Live safety updates are disconnected. Reconnecting…");
     return () => { cancelAnimationFrame(frame); events.close(); };
   }, [refresh]);
 

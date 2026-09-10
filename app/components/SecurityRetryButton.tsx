@@ -12,8 +12,8 @@ export function SecurityRetryButton({ disabled, reviewId, onRetry }: { disabled:
     if (disabled || submitting) return;
     setSubmitting(true); setError(undefined);
     try { await onRetry(reviewId); }
-    catch (reason) { setError(reason instanceof Error ? reason.message : "Could not retry the Security Agent."); }
+    catch (reason) { setError(reason instanceof Error ? reason.message : "Could not retry the Safety Agent."); }
     finally { setSubmitting(false); }
   }
-  return <span className={styles.action}><button aria-label="Retry Security Agent" disabled={disabled || submitting} onClick={() => void retry()} title="Retry Security Agent" type="button"><RotateCcw aria-hidden="true" /></button>{error ? <small role="alert">{error}</small> : null}</span>;
+  return <span className={styles.action}><button aria-label="Retry Safety Agent" disabled={disabled || submitting} onClick={() => void retry()} title="Retry Safety Agent" type="button"><RotateCcw aria-hidden="true" /></button>{error ? <small role="alert">{error}</small> : null}</span>;
 }

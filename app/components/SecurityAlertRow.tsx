@@ -8,8 +8,8 @@ export function SecurityAlertRow({ review, selected, onSelect }: { review: Secur
 
 function statusLabel(review: SecurityReview) {
   if (review.status === "queued") return "Queued";
-  if (review.status === "processing") return "Security Agent working";
-  return "Security review";
+  if (review.status === "processing") return "Safety Agent working";
+  return "Safety review";
 }
 
 function formatTime(value: string) {

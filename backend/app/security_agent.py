@@ -52,7 +52,7 @@ class SecurityAgentManager:
     async def retry(self, family_id: str, review_id: str) -> dict[str, object]:
         review = self.store.security_review(review_id, family_id)
         if not review:
-            raise ValueError("Security review not found.")
+            raise ValueError("Safety review not found.")
         if review["status"] == "processing":
             return review
         self.store.set_security_review(
@@ -84,14 +84,14 @@ class SecurityAgentManager:
                 review_id,
                 status="completed",
                 action="ignore",
-                reason="Security monitoring is turned off.",
+                reason="Safety monitoring is turned off.",
                 processed_at=now(),
             )
-            self.store.add_security_activity(review_id, "decision", "Security monitoring is turned off.", {"action": "ignore"})
+            self.store.add_security_activity(review_id, "decision", "Safety monitoring is turned off.", {"action": "ignore"})
             self._publish(family_id, review_id)
             return
         self.store.set_security_review(review_id, status="processing", failure="")
-        self.store.add_security_activity(review_id, "started", "Security Agent started reviewing the item.")
+        self.store.add_security_activity(review_id, "started", "Safety Agent started reviewing the item.")
         self._publish(family_id, review_id)
         try:
             await asyncio.to_thread(asyncio.run, run_security_agent(self.store, family_id, review_id))

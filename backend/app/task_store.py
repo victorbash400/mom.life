@@ -319,7 +319,7 @@ class TaskStore(GoalLedger):
             )
             connection.execute(
                 "INSERT INTO security_activities VALUES (?,?,?,?,?,?)",
-                (str(uuid4()), identity, "received", "Security Agent received the item.", "{}", now()),
+                (str(uuid4()), identity, "received", "Safety Agent received the item.", "{}", now()),
             )
             row = connection.execute("SELECT * FROM security_reviews WHERE id=?", (identity,)).fetchone()
             return self._security_snapshot(connection, row), True

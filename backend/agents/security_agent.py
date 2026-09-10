@@ -11,9 +11,9 @@ from app.config import Settings, get_settings
 from app.task_store import TaskStore, now
 
 
-SECURITY_PROMPT = """You are mom.life's Security Agent. Review exactly one incoming family item for a credible security or safety concern. Do not route ordinary family work and do not execute a response.
+SECURITY_PROMPT = """You are mom.life's Safety Agent. Review exactly one incoming family item for a credible safety concern, including digital and physical safety. Do not route ordinary family work and do not execute a response.
 
-Use tools for every read and write. First read the original item, family context, parent security settings, and Family Security Monitoring skill. Interpret the evidence in context; never use keyword matching and never invent identity, intent, location, urgency, or harm.
+Use tools for every read and write. First read the original item, family context, parent safety settings, and Family Safety Monitoring skill. Interpret the evidence in context; never use keyword matching and never invent identity, intent, location, urgency, or harm.
 
 Follow the parent's alert level:
 - urgent: alert only for an imminent or high-consequence credible concern;
@@ -32,7 +32,7 @@ class _StopAfterDecision:
 
     def before(self, event: BeforeToolCallEvent) -> None:
         if self.result:
-            event.cancel_tool = "This security review already has its final decision."
+            event.cancel_tool = "This safety review already has its final decision."
 
 
 async def run_security_agent(store: TaskStore, family_id: str, review_id: str, settings: Settings | None = None) -> dict[str, object]:
@@ -40,10 +40,10 @@ async def run_security_agent(store: TaskStore, family_id: str, review_id: str, s
 
     @tool
     def read_security_context() -> dict[str, object]:
-        """Read the original evidence, known family members, and saved parent security settings."""
+        """Read the original evidence, known family members, and saved parent safety settings."""
         review = store.security_review(review_id, family_id)
         if not review or not review["incoming"]:
-            raise ValueError("The security review source is unavailable.")
+            raise ValueError("The safety review source is unavailable.")
         from app.auth import families
         return {
             "review": {key: value for key, value in review.items() if key not in {"activities", "incoming"}},
@@ -58,12 +58,12 @@ async def run_security_agent(store: TaskStore, family_id: str, review_id: str, s
 
     @tool
     def read_security_monitoring_skill() -> dict[str, object]:
-        """Read the family's editable procedure for reviewing security concerns."""
+        """Read the family's editable procedure for reviewing safety concerns."""
         from app.skills import BUILTIN_SKILLS
         store.seed_skills(family_id, BUILTIN_SKILLS)
         skill = next((item for item in store.skills(family_id) if item["slug"] == "family-security-monitoring"), None)
         if not skill:
-            raise ValueError("The Family Security Monitoring skill is unavailable.")
+            raise ValueError("The Family Safety Monitoring skill is unavailable.")
         return {"name": skill["name"], "instructions": skill["instructions"]}
 
     @tool
@@ -75,13 +75,13 @@ async def run_security_agent(store: TaskStore, family_id: str, review_id: str, s
         summary: str = "",
         child_id: str = "",
     ) -> dict[str, object]:
-        """Record the one final security decision for this review."""
+        """Record the one final safety decision for this review."""
         clean_reason = reason.strip()
         if not clean_reason:
-            raise ValueError("The security decision needs an evidence-based reason.")
+            raise ValueError("The safety decision needs an evidence-based reason.")
         review = store.security_review(review_id, family_id)
         if not review or review["status"] != "processing":
-            raise ValueError("This security review is not available for a decision.")
+            raise ValueError("This safety review is not available for a decision.")
         selected_child = child_id.strip()
         if selected_child and selected_child != "all":
             from app.auth import families
@@ -89,7 +89,7 @@ async def run_security_agent(store: TaskStore, family_id: str, review_id: str, s
                 raise ValueError("Select a known child or all-family scope.")
         clean_summary = summary.strip()
         if action == "alert" and not clean_summary:
-            raise ValueError("A security alert needs a concise summary.")
+            raise ValueError("A safety alert needs a concise summary.")
         store.set_security_review(
             review_id,
             status="completed",
@@ -114,7 +114,7 @@ async def run_security_agent(store: TaskStore, family_id: str, review_id: str, s
     config = settings or get_settings()
     session = boto3.Session(profile_name=config.aws_profile or None, region_name=config.strands_region)
     agent = Agent(
-        name="mom_life_security_agent",
+        name="mom_life_safety_agent",
         model=BedrockModel(boto_session=session, model_id=config.strands_model_id, temperature=0.1),
         system_prompt=SECURITY_PROMPT,
         tools=[read_security_context, read_security_monitoring_skill, decide_security_action],
@@ -130,5 +130,5 @@ async def run_security_agent(store: TaskStore, family_id: str, review_id: str, s
     finally:
         await stream.aclose()
     if not result:
-        raise RuntimeError("The Security Agent stopped without recording a decision.")
+        raise RuntimeError("The Safety Agent stopped without recording a decision.")
     return result

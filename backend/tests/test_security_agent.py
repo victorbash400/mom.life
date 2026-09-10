@@ -55,7 +55,7 @@ def test_security_agent_uses_settings_and_records_one_decision(tmp_path, monkeyp
             assert context["settings"]["alert_level"] == "all"
             assert context["incoming"]["source"] == "email"
             skill = self.tools["read_security_monitoring_skill"]()
-            assert skill["name"] == "Family Security Monitoring"
+            assert skill["name"] == "Family Safety Monitoring"
             self.tools["decide_security_action"](
                 "alert",
                 "The message reports account access from a new device.",
@@ -94,4 +94,4 @@ def test_disabled_security_monitoring_stays_quiet(tmp_path):
     asyncio.run(manager._run("family", str(review["id"])))
     saved = store.security_review(str(review["id"]), "family")
     assert saved["action"] == "ignore"
-    assert saved["reason"] == "Security monitoring is turned off."
+    assert saved["reason"] == "Safety monitoring is turned off."
