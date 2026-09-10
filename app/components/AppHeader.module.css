@@ -2,11 +2,12 @@
 .greeting { display: flex; padding: 0; gap: 12px; align-items: center; color: #4b403b; border: 0; background: transparent; cursor: pointer; }
 .greeting img { width: 44px; height: 44px; border: 2px solid rgb(255 255 255 / 76%); border-radius: 50%; object-fit: cover; box-shadow: 0 5px 16px rgb(94 66 53 / 13%); }
 .greeting span { font-family: var(--font-display), Georgia, serif; font-size: clamp(25px, 2.2vw, 32px); font-weight: 500; letter-spacing: -.035em; }
-.actions { display: flex; gap: clamp(7px, .9vw, 13px); align-items: center; }
-.actions button { display: grid; width: 42px; height: 42px; padding: 0; place-items: center; color: #8f665d; border: 0; background: transparent; cursor: pointer; }
-.actions svg { width: 32px; height: 32px; stroke-width: 1.55; }
-.simulatorIcon { width: 36px; height: 36px; background: currentColor; -webkit-mask: url("/iphone-svgrepo-com.svg") center / contain no-repeat; mask: url("/iphone-svgrepo-com.svg") center / contain no-repeat; }
-.actions button { position: relative; }
-.actions button i { position: absolute; top: 3px; right: 2px; width: 7px; height: 7px; border: 1px solid #f8eee8; border-radius: 50%; background: #b23f39; }
-.actions button:hover, .actions button[aria-expanded="true"], .greeting:hover { opacity: .72; }
-@media (max-width: 620px) { .header { top: 20px; right: 22px; left: 22px; } .greeting img { width: 38px; height: 38px; } .greeting span { display: none; } .actions { gap: 5px; } .actions button { width: 34px; height: 38px; } .actions svg { width: 27px; height: 27px; } .simulatorIcon { width: 30px; height: 30px; } }
+.actions { display: flex; padding: 4px; gap: 2px; align-items: center; border: 1px solid rgb(211 190 182 / 58%); border-radius: 23px; background: rgb(250 246 244 / 88%); box-shadow: 0 7px 20px rgb(83 52 44 / 9%), inset 0 0 0 1px rgb(255 255 255 / 82%); backdrop-filter: blur(12px); }
+.actions button { position: relative; display: grid; width: 36px; height: 34px; padding: 0; place-items: center; color: #8f665d; border: 0; border-radius: 17px; background: transparent; cursor: pointer; transition: color 150ms ease,background 150ms ease,transform 150ms ease; }
+.actions svg { width: 23px; height: 23px; stroke-width: 1.6; }
+.simulatorIcon { width: 25px; height: 25px; background: currentColor; -webkit-mask: url("/iphone-svgrepo-com.svg") center / contain no-repeat; mask: url("/iphone-svgrepo-com.svg") center / contain no-repeat; }
+.actions button i { position: absolute; top: 2px; right: 1px; width: 7px; height: 7px; border: 1px solid #faf6f4; border-radius: 50%; background: #b23f39; }
+.actions button:hover,.actions button[aria-expanded="true"] { color: #684943; background: #ead8d3; transform: translateY(-1px); }
+.actions button:focus-visible { outline: 2px solid #b97771; outline-offset: 1px; }
+.greeting:hover { opacity: .72; }
+@media (max-width: 620px) { .header { top: 20px; right: 22px; left: 22px; } .greeting img { width: 38px; height: 38px; } .greeting span { display: none; } .actions { gap: 0; padding: 3px; } .actions button { width: 31px; height: 32px; } .actions svg { width: 20px; height: 20px; } .simulatorIcon { width: 22px; height: 22px; } }

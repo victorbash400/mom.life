@@ -1,6 +1,9 @@
-.actions { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; padding: 10px 5px; font-size: 12px; color: #654e47; }
+.actions { display: flex; min-height: 50px; flex-wrap: wrap; align-items: center; gap: 8px; padding: 8px 5px; font-size: 12px; color: #654e47; }
 .actions button,.actions label,.actions a { border: 1px solid #cbb6af; border-radius: 16px; background: #f3e9e4; color: #654e47; padding: 7px 13px; cursor: pointer; text-decoration: none; }
-.actions label { position: relative; overflow: hidden; }
+.actions .iconAction { position: relative; display: grid; width: 34px; height: 34px; padding: 0; place-items: center; border: 0; border-radius: 17px; background: #faf6f4; box-shadow: 0 4px 14px rgb(83 52 44 / 7%), inset 0 0 0 1px rgb(255 255 255 / 82%); transition: color 150ms ease,background 150ms ease,transform 150ms ease; }
+.actions .iconAction:hover,.actions .iconAction[aria-expanded="true"] { color: #4a3733; background: #ead8d3; transform: translateY(-1px); }
+.iconAction svg { width: 18px; height: 18px; stroke-width: 1.65; }
+.actions label { overflow: hidden; }
 .actions label input { position: absolute; inset: 0; opacity: 0; width: 100%; cursor: pointer; }
 .actions form { display: flex; gap: 8px; }
 .actions form input { border: 1px solid #cbb6af; border-radius: 10px; padding: 7px; background: #fff9f2; }
