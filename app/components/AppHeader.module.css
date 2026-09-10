@@ -2,10 +2,11 @@
 .greeting { display: flex; padding: 0; gap: 12px; align-items: center; color: #4b403b; border: 0; background: transparent; cursor: pointer; }
 .greeting img { width: 44px; height: 44px; border: 2px solid rgb(255 255 255 / 76%); border-radius: 50%; object-fit: cover; box-shadow: 0 5px 16px rgb(94 66 53 / 13%); }
 .greeting span { font-family: var(--font-display), Georgia, serif; font-size: clamp(25px, 2.2vw, 32px); font-weight: 500; letter-spacing: -.035em; }
-.actions { display: flex; gap: clamp(16px, 2.15vw, 31px); align-items: center; }
-.actions button { display: grid; width: 44px; height: 44px; padding: 0; place-items: center; color: #8f665d; border: 0; background: transparent; cursor: pointer; }
-.actions svg { width: 36px; height: 36px; stroke-width: 1.55; }
+.actions { display: flex; gap: clamp(7px, .9vw, 13px); align-items: center; }
+.actions button { display: grid; width: 42px; height: 42px; padding: 0; place-items: center; color: #8f665d; border: 0; background: transparent; cursor: pointer; }
+.actions svg { width: 32px; height: 32px; stroke-width: 1.55; }
+.simulatorIcon { width: 36px; height: 36px; background: currentColor; -webkit-mask: url("/iphone-svgrepo-com.svg") center / contain no-repeat; mask: url("/iphone-svgrepo-com.svg") center / contain no-repeat; }
 .actions button { position: relative; }
 .actions button i { position: absolute; top: 3px; right: 2px; width: 7px; height: 7px; border: 1px solid #f8eee8; border-radius: 50%; background: #b23f39; }
 .actions button:hover, .actions button[aria-expanded="true"], .greeting:hover { opacity: .72; }
-@media (max-width: 620px) { .header { top: 20px; right: 22px; left: 22px; } .greeting img { width: 38px; height: 38px; } .actions { gap: 14px; } .actions button { width: 34px; } .actions svg { width: 28px; height: 28px; } }
+@media (max-width: 620px) { .header { top: 20px; right: 22px; left: 22px; } .greeting img { width: 38px; height: 38px; } .greeting span { display: none; } .actions { gap: 5px; } .actions button { width: 34px; height: 38px; } .actions svg { width: 27px; height: 27px; } .simulatorIcon { width: 30px; height: 30px; } }
