@@ -28,6 +28,7 @@ def test_health_simulator_connects_seeds_and_loads_agent_tools(tmp_path):
     assert "apple-health" in store.installed_plugins("family")
     assert next(item for item in state["connections"] if item["id"] == "apple-health")["connected"] is True
     assert state["health"]["profiles"]["child"]["step_count"] > 0
+    assert 8 <= state["health"]["profiles"]["child"]["sleep_analysis"] <= 9
 
     session = PluginToolSession(["apple-health"], store, "family")
     directory = asyncio.run(session.load("apple-health"))
@@ -72,3 +73,22 @@ def test_simulator_disconnect_does_not_remove_the_installed_plugin(tmp_path):
     service.disconnect("family", "instacart")
     assert "instacart" in store.installed_plugins("family")
     assert "instacart" not in store.simulator_plugins("family")
+
+
+def test_health_simulator_route_updates_a_child_sample(tmp_path, monkeypatch, auth_headers):
+    from app import auth, main
+
+    store = TaskStore(tmp_path / "simulator.db")
+    families = Families()
+    monkeypatch.setattr(main, "task_store", store)
+    monkeypatch.setattr(auth, "families", families)
+    SimulatorService(store, families).connect("family", "apple-health")
+
+    response = TestClient(main.app).put(
+        "/api/simulator/health",
+        headers=auth_headers("family"),
+        json={"child_id": "child", "date": date.today().isoformat(), "steps": 6500, "sleep_hours": 8.7, "heart_rate": 81, "active_energy": 249, "distance": 3599},
+    )
+
+    assert response.status_code == 200
+    assert response.json()["profiles"]["child"]["step_count"] == 6500
