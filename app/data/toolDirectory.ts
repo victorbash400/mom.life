@@ -1,4 +1,4 @@
-import { Activity, Bot, CheckSquare2, GraduationCap, HeartPulse, Mail, MapPinned, MessageCircle, NotebookPen, Palette, ShoppingBasket, type LucideIcon } from "lucide-react";
+import { Activity, CheckSquare2, Globe2, GraduationCap, HeartPulse, Mail, MapPinned, MessageCircle, NotebookPen, Palette, ShoppingBasket, type LucideIcon } from "lucide-react";
 
 export type ToolGroup = "Family essentials" | "Education" | "Health and care" | "Planning" | "Shopping and home" | "Communication" | "Automation";
 export type ToolDefinition = { id: string; name: string; description: string; group: ToolGroup; color: string; icon: LucideIcon; permissions: string[]; setup: string };
@@ -18,7 +18,7 @@ export const toolDirectory: ToolDefinition[] = [
   { id: "withings", name: "Withings", description: "Measurements, activity, and sleep from Withings devices", group: "Health and care", color: "#5582a0", icon: HeartPulse, permissions: ["Read authorized body measurements", "Read authorized activity and sleep summaries"], setup: "Uses the Withings Health Data API with OAuth." },
   { id: "apple-health", name: "Apple Health", description: "Health and activity data approved on an iPhone", group: "Health and care", color: "#a86f78", icon: HeartPulse, permissions: ["Read synced activity, sleep, and heart-rate samples"], setup: "Connects through the mom.life iPhone companion after HealthKit permission is granted." },
   { id: "whatsapp", name: "WhatsApp", description: "Receive family messages and send approved updates", group: "Communication", color: "#3fa765", icon: MessageCircle, permissions: ["Receive messages sent to the mom.life business number", "Send approved replies and templates"], setup: "Uses a mom.life MCP adapter over the WhatsApp Business Cloud API." },
-  { id: "agentcore-browser", name: "AgentCore Browser", description: "Complete permitted work on websites without an API", group: "Automation", color: "#735c91", icon: Bot, permissions: ["Open and inspect managed browser sessions", "Fill forms and prepare consequential actions for approval"], setup: "Uses Amazon Bedrock AgentCore Browser with AWS IAM." },
+  { id: "agentcore-browser", name: "AgentCore Browser", description: "Complete permitted work on websites without an API", group: "Automation", color: "#735c91", icon: Globe2, permissions: ["Open and inspect managed browser sessions", "Fill forms and prepare consequential actions for approval"], setup: "Uses Amazon Bedrock AgentCore Browser with AWS IAM." },
 ];
 
 export function toolById(id: string) { return toolDirectory.find((tool) => tool.id === id); }
