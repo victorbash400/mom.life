@@ -27,7 +27,7 @@ GOOGLE_WORKSPACE_SCOPES = {
     'https://www.googleapis.com/auth/documents',
     'https://www.googleapis.com/auth/calendar.calendarlist.readonly',
     'https://www.googleapis.com/auth/calendar.events.freebusy',
-    'https://www.googleapis.com/auth/calendar.events.readonly',
+    'https://www.googleapis.com/auth/calendar.events',
 }
 
 GOOGLE_CLASSROOM_SCOPES = {
@@ -248,6 +248,17 @@ class OAuthConnections:
             return None
         return {key:claims.get(key) for key in ('email','name','picture') if claims.get(key)} or None
 
+    def has_required_scopes(self, family_id, plugin_id):
+        if plugin_id not in GOOGLE_PLUGINS:
+            return True
+        with self.store._connect() as db:
+            row=db.execute('SELECT token FROM oauth_tokens WHERE family_id=? AND plugin_id=?',(family_id,plugin_id)).fetchone()
+        if not row:
+            return False
+        tokens=json.loads(self.cipher.decrypt(row['token'].encode()))
+        required=GOOGLE_WORKSPACE_SCOPES if plugin_id == 'google-workspace' else GOOGLE_CLASSROOM_SCOPES
+        return required.issubset(set(tokens.get('scope','').split()))
+
     async def access_token(self,family_id,plugin_id):
         from app.runtime_lock import acquire, release
         with self.store._connect() as db:
@@ -285,6 +296,7 @@ class OAuthConnections:
             if not renewed.get('access_token') or str(renewed.get('token_type','')).lower()!='bearer':
                 raise ValueError('Provider returned an invalid refreshed token.')
             renewed['refresh_token']=renewed.get('refresh_token') or tokens['refresh_token']
+            renewed['scope']=renewed.get('scope') or tokens.get('scope','')
             renewed['expires_at']=time.time()+float(renewed.get('expires_in',3600))
             with self.store._connect() as db:
                 updated=db.execute('UPDATE oauth_tokens SET token=? WHERE family_id=? AND plugin_id=? AND token=?',(self.cipher.encrypt(json.dumps(renewed).encode()).decode(),family_id,plugin_id,original))

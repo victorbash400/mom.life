@@ -1,6 +1,6 @@
 """Bounded Google Workspace tools backed by the official REST APIs."""
 import base64
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from email.message import EmailMessage
 
 import httpx
@@ -38,17 +38,31 @@ class GoogleWorkspaceAdapter:
                 definition('read_doc','Read a Google document.',{'document_id':field('document_id','Google Docs document ID')}),
                 definition('append_text','Append text to a Google document.',{'document_id':field('document_id','Google Docs document ID'),'text':field('text','Text to append')},True),
             ]
+        create = definition('create_event','Create an approved Google Calendar event.',{
+            'title':field('title','Event title'),
+            'start':field('start','RFC 3339 start date and time'),
+            'end':field('end','RFC 3339 end date and time'),
+            'time_zone':field('time_zone','IANA time zone'),
+            'location':field('location','Location or empty string'),
+            'notes':field('notes','Event notes or empty string'),
+            'reminder_method':field('reminder_method','popup or email'),
+            'reminder_minutes':field('reminder_minutes','10, 30, 60, or 1440'),
+        },True)
+        create['inputSchema']['json']['required'] = ['title','start','end','time_zone','reminder_method','reminder_minutes']
         return [
             definition('list_events','Read upcoming Google Calendar events.'),
             definition('get_event','Read one Google Calendar event.',{'event_id':field('event_id','Google Calendar event ID')}),
+            create,
+            definition('delete_event','Remove an approved Google Calendar event.',{'event_id':field('event_id','Google Calendar event ID')},True),
         ]
 
     async def call(self, name, arguments):
         specs = {item['name']:item for item in self.directory()}
         if name not in specs:
             raise ValueError('Unknown Google Workspace capability.')
-        required = specs[name]['inputSchema']['json']['required']
-        if set(arguments) != set(required) or any(not isinstance(value,str) or not value.strip() for value in arguments.values()):
+        schema = specs[name]['inputSchema']['json']
+        required = set(schema['required'])
+        if not required.issubset(arguments) or not set(arguments).issubset(schema['properties']) or any(not isinstance(value,str) for value in arguments.values()) or any(not arguments[name].strip() for name in required):
             raise ValueError('Supply exactly the documented non-empty string arguments.')
         headers = {'Authorization':f'Bearer {self.token}'}
         method, body = 'GET', None
@@ -86,15 +100,35 @@ class GoogleWorkspaceAdapter:
                     return {'status':'success','http_status':response.status_code,'data':response.json()}
         else:
             if name == 'list_events':
+                now = datetime.now(timezone.utc)
                 url = 'https://www.googleapis.com/calendar/v3/calendars/primary/events'
-                params = {'maxResults':'25','singleEvents':'true','orderBy':'startTime','timeMin':datetime.now(timezone.utc).isoformat()}
+                params = {'maxResults':'25','singleEvents':'true','orderBy':'startTime','timeMin':now.isoformat(),'timeMax':(now+timedelta(days=180)).isoformat()}
+            elif name == 'create_event':
+                if arguments['reminder_method'] not in {'popup','email'} or arguments['reminder_minutes'] not in {'10','30','60','1440'}:
+                    raise ValueError('Use the saved Calendar reminder method and timing.')
+                for value in (arguments['start'], arguments['end']):
+                    datetime.fromisoformat(value.replace('Z','+00:00'))
+                url, params, method = 'https://www.googleapis.com/calendar/v3/calendars/primary/events', None, 'POST'
+                body = {
+                    'summary':arguments['title'],
+                    'start':{'dateTime':arguments['start'],'timeZone':arguments['time_zone']},
+                    'end':{'dateTime':arguments['end'],'timeZone':arguments['time_zone']},
+                    'reminders':{'useDefault':False,'overrides':[{'method':arguments['reminder_method'],'minutes':int(arguments['reminder_minutes'])}]},
+                }
+                if arguments.get('location'):
+                    body['location'] = arguments['location']
+                if arguments.get('notes'):
+                    body['description'] = arguments['notes']
+            elif name == 'delete_event':
+                url = f"https://www.googleapis.com/calendar/v3/calendars/primary/events/{arguments['event_id']}"
+                params, method = None, 'DELETE'
             else:
                 url = f"https://www.googleapis.com/calendar/v3/calendars/primary/events/{arguments['event_id']}"
                 params = None
         async with self._client() as client:
             response = await client.request(method,url,headers=headers,params=params,json=body)
             response.raise_for_status()
-            return {'status':'success','http_status':response.status_code,'data':response.json()}
+            return {'status':'success','http_status':response.status_code,'data':response.json() if response.content else {}}
 
     async def validate(self):
         probes = {

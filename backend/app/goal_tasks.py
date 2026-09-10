@@ -157,6 +157,7 @@ class GoalTaskManager:
             "mom_answers": self.store.questions(str(goal["id"])),
             "previous_run_evidence": self.store.get(family_id,str(goal["id"]))["activities"],
             "family_context": self.store.family_context(family_id),
+            "calendar_preferences": self.store.calendar_preferences(family_id),
         })
         self.store.set_assignment(str(assignment["id"]), status="running", phase="working", started_at=datetime.now(UTC).isoformat())
         self.store.set_goal_state(str(goal["id"]), run_state="running", current_step=str(assignment["title"]))

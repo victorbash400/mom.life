@@ -48,6 +48,8 @@ from app.security_routes import router as security_router
 app.include_router(security_router)
 from app.education_routes import router as education_router
 app.include_router(education_router)
+from app.calendar_routes import router as calendar_router
+app.include_router(calendar_router)
 from app.whatsapp_webhook import router as webhook_router
 app.include_router(webhook_router)
 from app.apple_health_routes import router as apple_health_router

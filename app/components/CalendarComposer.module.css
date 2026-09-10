@@ -1,0 +1,8 @@
+.composer { position: relative; display: grid; width: min(620px,100%); margin: 0 auto; padding: 5px; grid-template-columns: minmax(0,1fr) 38px; border: 1px solid rgb(196 153 143 / 25%); border-radius: 25px; background: rgb(255 255 255 / 76%); box-shadow: 0 10px 26px rgb(78 49 42 / 7%), inset 0 1px rgb(255 255 255 / 86%); }
+.composer:focus-within { border-color: rgb(184 115 109 / 44%); box-shadow: 0 0 0 4px rgb(184 115 109 / 8%), 0 12px 28px rgb(78 49 42 / 8%); }
+.composer input { min-width: 0; height: 38px; padding: 0 12px; border: 0; outline: 0; color: #463a37; background: transparent; font: inherit; font-size: 12px; }
+.composer input::placeholder { color: #a59089; }
+.composer button { display: grid; width: 34px; height: 34px; padding: 0; place-items: center; align-self: center; border: 0; border-radius: 50%; color: #fff; background: #b8736d; cursor: pointer; }
+.composer button:disabled { color: #baa8a2; background: #ede3df; cursor: default; }
+.composer svg { width: 15px; height: 15px; stroke-width: 2; }
+.composer small { position: absolute; top: calc(100% + 6px); left: 17px; color: #8e7c76; font-size: 9px; }

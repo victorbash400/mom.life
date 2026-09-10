@@ -56,6 +56,20 @@ def test_google_workspace_requests_offline_incremental_consent(tmp_path,monkeypa
     assert query['prompt']==['consent']
 
 
+def test_google_workspace_connection_requires_current_scopes(tmp_path):
+    store=TaskStore(tmp_path/'oauth.db')
+    store.install_plugin('family','google-workspace')
+    oauth=OAuthConnections(store)
+    token={'access_token':'token','expires_at':9999999999,'scope':'https://www.googleapis.com/auth/calendar.events.readonly'}
+    with store._connect() as db:
+        db.execute('INSERT INTO oauth_tokens VALUES (?,?,?)',('family','google-workspace',oauth.cipher.encrypt(json.dumps(token).encode()).decode()))
+    assert not oauth.has_required_scopes('family','google-workspace')
+    token['scope']=' '.join(sorted(GOOGLE_WORKSPACE_SCOPES))
+    with store._connect() as db:
+        db.execute('UPDATE oauth_tokens SET token=? WHERE family_id=? AND plugin_id=?',(oauth.cipher.encrypt(json.dumps(token).encode()).decode(),'family','google-workspace'))
+    assert oauth.has_required_scopes('family','google-workspace')
+
+
 def test_google_classroom_reuses_registered_google_client_with_read_only_scopes(tmp_path,monkeypatch):
     store=TaskStore(tmp_path/'oauth.db')
     store.install_plugin('family','google-classroom')

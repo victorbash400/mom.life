@@ -115,6 +115,12 @@ class TaskStore(GoalLedger):
                     created_at TEXT NOT NULL, processed_at TEXT,
                     UNIQUE(family_id, incoming_id)
                 );
+                CREATE TABLE IF NOT EXISTS calendar_preferences (
+                    family_id TEXT PRIMARY KEY, enabled INTEGER NOT NULL DEFAULT 1,
+                    reminder_method TEXT NOT NULL DEFAULT 'popup',
+                    reminder_minutes INTEGER NOT NULL DEFAULT 30,
+                    updated_at TEXT NOT NULL
+                );
             """)
             connection.executescript("""
                 CREATE TABLE IF NOT EXISTS family_context (family_id TEXT PRIMARY KEY, payload TEXT NOT NULL);
@@ -143,6 +149,28 @@ class TaskStore(GoalLedger):
                 );
             """)
             self._migrate_tasks(connection)
+
+    def calendar_preferences(self, family_id: str) -> dict[str, object]:
+        with self._connect() as connection:
+            row = connection.execute("SELECT * FROM calendar_preferences WHERE family_id=?", (family_id,)).fetchone()
+        if not row:
+            return {"enabled": True, "reminder_method": "popup", "reminder_minutes": 30}
+        return {
+            "enabled": bool(row["enabled"]),
+            "reminder_method": row["reminder_method"],
+            "reminder_minutes": row["reminder_minutes"],
+        }
+
+    def save_calendar_preferences(self, family_id: str, enabled: bool, reminder_method: str, reminder_minutes: int) -> dict[str, object]:
+        with self._connect() as connection:
+            connection.execute(
+                """INSERT INTO calendar_preferences VALUES (?,?,?,?,?)
+                ON CONFLICT (family_id) DO UPDATE SET enabled=excluded.enabled,
+                reminder_method=excluded.reminder_method,reminder_minutes=excluded.reminder_minutes,
+                updated_at=excluded.updated_at""",
+                (family_id, int(enabled), reminder_method, reminder_minutes, now()),
+            )
+        return self.calendar_preferences(family_id)
 
     def _migrate_tasks(self, connection: sqlite3.Connection) -> None:
         if not isinstance(self.database, Path):

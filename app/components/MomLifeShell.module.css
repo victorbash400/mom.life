@@ -13,6 +13,7 @@
 
 .shell[data-mode="ask"],
 .shell[data-mode="tasks"],
+.shell[data-mode="calendar"],
 .shell[data-mode="incoming"],
 .shell[data-mode="security"] {
   --panel-top: clamp(142px, 19vh, 205px);
@@ -28,5 +29,5 @@
     --panel-inline: 20px;
     --panel-bottom: 20px;
   }
-  .shell[data-mode="ask"], .shell[data-mode="tasks"], .shell[data-mode="incoming"], .shell[data-mode="security"], .shell[data-mode="plugins"], .shell[data-mode="simulator"], .shell[data-mode="child"], .shell[data-mode="child-info"] { --panel-top: 138px; --panel-inline: 12px; --panel-bottom: 12px; }
+  .shell[data-mode="ask"], .shell[data-mode="tasks"], .shell[data-mode="calendar"], .shell[data-mode="incoming"], .shell[data-mode="security"], .shell[data-mode="plugins"], .shell[data-mode="simulator"], .shell[data-mode="child"], .shell[data-mode="child-info"] { --panel-top: 138px; --panel-inline: 12px; --panel-bottom: 12px; }
 }

@@ -1,0 +1,8 @@
+.workspace { position: absolute; inset: clamp(25px,4%,38px) clamp(32px,6%,72px) clamp(25px,4%,38px); display: grid; min-height: 0; grid-template-rows: 36px minmax(0,1fr); gap: 16px; color: #30302e; animation: calendar-in 360ms 70ms cubic-bezier(.22,1,.36,1) both; }
+.body { display: grid; min-height: 0; padding: clamp(18px,3vw,36px) clamp(22px,5vw,64px) 30px; grid-template-rows: minmax(0,1fr) auto; gap: 24px; border-radius: 22px; background: rgb(255 255 255 / 72%); box-shadow: 0 12px 36px rgb(70 48 40 / 4%); }
+.events { min-height: 0; padding: 0 14px; overflow: auto; scrollbar-width: thin; scrollbar-color: rgb(173 139 130 / 38%) transparent; }
+.events > p { margin: 30px 7px; color: #92847f; font-size: 11px; }
+.error { position: absolute; top: 48px; z-index: 2; margin: 0; color: #a43d38; font-size: 11px; }
+@keyframes calendar-in { from { opacity: 0; transform: translateY(12px) scale(.992); } to { opacity: 1; transform: none; } }
+@media (max-width: 760px) { .workspace { inset: 22px 20px 20px; }.body { padding: 12px 12px 25px; } }
+@media (prefers-reduced-motion: reduce) { .workspace { animation: none; } }

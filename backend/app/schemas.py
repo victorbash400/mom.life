@@ -59,6 +59,12 @@ class SecuritySettingsWrite(BaseModel):
     instructions: str = Field(default="", max_length=4_000)
 
 
+class CalendarPreferencesWrite(BaseModel):
+    enabled: bool = True
+    reminder_method: Literal["popup", "email"] = "popup"
+    reminder_minutes: Literal[10, 30, 60, 1440] = 30
+
+
 class SkillWrite(BaseModel):
     name: str = Field(min_length=1,max_length=120)
     description: str = Field(min_length=1,max_length=1000)

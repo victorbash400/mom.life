@@ -1,9 +1,15 @@
 """Session-scoped AgentCore browser operations with observed DOM evidence."""
 import asyncio
+import base64
+import datetime
+import secrets
 import time
 from urllib.parse import urlsplit
 
+import boto3
 from bedrock_agentcore.tools.browser_client import BrowserClient
+from botocore.auth import SigV4Auth
+from botocore.awsrequest import AWSRequest
 from playwright.async_api import async_playwright
 
 from app.config import get_settings
@@ -21,7 +27,19 @@ class BrowserAdapter:
         if store:
             with store._connect() as db:
                 db.execute("CREATE TABLE IF NOT EXISTS browser_sessions (assignment_id TEXT PRIMARY KEY REFERENCES goal_assignments(id) ON DELETE CASCADE, session_id TEXT NOT NULL, expires_at REAL NOT NULL)")
-        self.client = BrowserClient(get_settings().strands_region)
+        config = get_settings()
+        self.client = BrowserClient(config.strands_region)
+        self.aws_session = None
+        if config.aws_profile and hasattr(self.client, 'data_plane_client'):
+            self.aws_session = boto3.Session(profile_name=config.aws_profile, region_name=config.strands_region)
+            for attribute, service in (
+                ('control_plane_client', 'bedrock-agentcore-control'),
+                ('data_plane_client', 'bedrock-agentcore'),
+            ):
+                previous = getattr(self.client, attribute, None)
+                if previous and hasattr(previous, 'close'):
+                    previous.close()
+                setattr(self.client, attribute, self.aws_session.client(service))
         self.playwright = None
         self.browser = None
         self.page = None
@@ -35,7 +53,6 @@ class BrowserAdapter:
 
     async def validate(self):
         # Listing verifies the configured IAM identity without starting a session.
-        import boto3
         config = get_settings()
         session = boto3.Session(profile_name=config.aws_profile or None,region_name=config.strands_region)
         client = session.client('bedrock-agentcore')
@@ -63,7 +80,7 @@ class BrowserAdapter:
                 if self.store and self.assignment_id:
                     with self.store._connect() as db:
                         db.execute("INSERT INTO browser_sessions VALUES (?,?,?)",(self.assignment_id,self.session_id,time.time()+900))
-            url,headers = await asyncio.to_thread(self.client.generate_ws_headers)
+            url,headers = await asyncio.to_thread(self._automation_stream)
             self.playwright = await async_playwright().start()
             self.browser = await self.playwright.chromium.connect_over_cdp(url,headers=headers)
             if not self.browser.contexts or not self.browser.contexts[0].pages:
@@ -73,6 +90,35 @@ class BrowserAdapter:
         except BaseException:
             await self.close()
             raise
+
+    def _automation_stream(self):
+        if not self.aws_session:
+            return self.client.generate_ws_headers()
+        endpoint = self.client.data_plane_client.meta.endpoint_url
+        host = endpoint.removeprefix('https://').rstrip('/')
+        path = f'/browser-streams/{self.client.identifier}/sessions/{self.client.session_id}/automation'
+        credentials = self.aws_session.get_credentials()
+        if not credentials:
+            raise RuntimeError('The configured AWS profile has no credentials.')
+        request = AWSRequest(
+            method='GET',
+            url=f'https://{host}{path}',
+            headers={'host':host,'x-amz-date':datetime.datetime.now(datetime.UTC).strftime('%Y%m%dT%H%M%SZ')},
+        )
+        frozen = credentials.get_frozen_credentials()
+        SigV4Auth(frozen,'bedrock-agentcore',get_settings().strands_region).add_auth(request)
+        headers = {
+            'Host':host,
+            'X-Amz-Date':request.headers['x-amz-date'],
+            'Authorization':request.headers['Authorization'],
+            'Upgrade':'websocket',
+            'Connection':'Upgrade',
+            'Sec-WebSocket-Version':'13',
+            'Sec-WebSocket-Key':base64.b64encode(secrets.token_bytes(16)).decode(),
+        }
+        if frozen.token:
+            headers['X-Amz-Security-Token'] = frozen.token
+        return f'wss://{host}{path}', headers
 
     async def call(self,name,arguments):
         methods = {item['name']:item for item in self.directory()}
@@ -103,9 +149,15 @@ class BrowserAdapter:
         finally:
             self.playwright = None
             self.browser = self.page = None
-            if self.session_id and not self.preserve_session:
-                await asyncio.to_thread(self.client.stop)
-                if self.store and self.assignment_id:
-                    with self.store._connect() as db:
-                        db.execute("DELETE FROM browser_sessions WHERE assignment_id=?",(self.assignment_id,))
-                self.session_id = None
+            try:
+                if self.session_id and not self.preserve_session:
+                    await asyncio.to_thread(self.client.stop)
+                    if self.store and self.assignment_id:
+                        with self.store._connect() as db:
+                            db.execute("DELETE FROM browser_sessions WHERE assignment_id=?",(self.assignment_id,))
+                    self.session_id = None
+            finally:
+                for attribute in ('control_plane_client', 'data_plane_client'):
+                    client = getattr(self.client, attribute, None)
+                    if client and hasattr(client, 'close'):
+                        client.close()

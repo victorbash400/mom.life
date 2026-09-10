@@ -18,8 +18,9 @@ class PluginService:
         from plugins.oauth import OAuthConnections
         oauth = OAuthConnections(self.store)
         identities = {plugin_id:oauth.identity(family_id,plugin_id) for plugin_id in installed}
+        authorized = {plugin_id:oauth.has_required_scopes(family_id,plugin_id) for plugin_id in installed}
         return [{**plugin_snapshot(plugin,plugin.id in installed,self.store.permissions(family_id,plugin.id)),
-                 'connected':plugin.id in installed and (plugin.id in validated or plugin.id in simulated),
+                 'connected':plugin.id in installed and authorized.get(plugin.id, True) and (plugin.id in validated or plugin.id in simulated),
                  'connection_mode':'simulated' if plugin.id in simulated else ('live' if plugin.id in validated else None),
                  'simulation_supported':plugin.id in {'whatsapp','apple-health','fitbit','withings','instacart'},
                  'validated_at':validated.get(plugin.id),
@@ -32,6 +33,10 @@ class PluginService:
         plugin_by_id(plugin_id)
         if plugin_id not in self.store.installed_plugins(family_id):
             raise ValueError('Install this plugin first.')
+        from plugins.oauth import OAuthConnections
+        oauth = OAuthConnections(self.store)
+        if not oauth.has_required_scopes(family_id, plugin_id):
+            raise ValueError('Reconnect this Google account to approve the current permissions.')
         with self.store._connect() as db:
             db.execute('DELETE FROM plugin_connections WHERE family_id=? AND plugin_id=?',(family_id,plugin_id))
         session = PluginToolSession([plugin_id],self.store,family_id)

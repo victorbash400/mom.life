@@ -82,6 +82,32 @@ def test_google_workspace_adapter_keeps_services_bounded():
         asyncio.run(gmail.call('send_message',{}))
 
 
+def test_google_calendar_adapter_reads_and_creates_events():
+    requests=[]
+    def handler(request):
+        requests.append(request)
+        if request.method == 'GET':
+            return httpx.Response(200,json={'items':[{'id':'event-1','summary':'School trip'}]})
+        body=json.loads(request.content)
+        assert body['summary']=='School trip'
+        assert body['start']['timeZone']=='Africa/Nairobi'
+        assert body['reminders']['overrides']==[{'method':'popup','minutes':30}]
+        assert 'location' not in body
+        return httpx.Response(200,json={'id':'event-2'})
+    calendar=GoogleWorkspaceAdapter('workspace.calendar','google-token',httpx.MockTransport(handler))
+    assert asyncio.run(calendar.call('list_events',{}))['data']['items'][0]['id']=='event-1'
+    result=asyncio.run(calendar.call('create_event',{
+        'title':'School trip',
+        'start':'2026-09-18T08:00:00+03:00',
+        'end':'2026-09-18T15:00:00+03:00',
+        'time_zone':'Africa/Nairobi',
+        'reminder_method':'popup',
+        'reminder_minutes':'30',
+    }))
+    assert result['data']['id']=='event-2'
+    assert [request.method for request in requests]==['GET','POST']
+
+
 def test_browser_uses_observed_targets_and_closes_session(monkeypatch):
     from plugins import browser_adapter
     from types import SimpleNamespace
