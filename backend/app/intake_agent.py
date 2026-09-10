@@ -100,7 +100,7 @@ class IntakeAgentManager:
         self.store.add_intake_activity(incoming_id, "started", "Intake Agent started reading the item.")
         self._publish(family_id, incoming_id)
         try:
-            decision = await run_intake_agent(self.store, family_id, incoming_id)
+            decision = await asyncio.to_thread(asyncio.run, run_intake_agent(self.store, family_id, incoming_id))
             goal_id = str(decision.get("goal_id") or "")
             if decision["action"] == "create_goal":
                 await self.goal_tasks.start(family_id, goal_id)

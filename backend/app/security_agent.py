@@ -94,7 +94,7 @@ class SecurityAgentManager:
         self.store.add_security_activity(review_id, "started", "Security Agent started reviewing the item.")
         self._publish(family_id, review_id)
         try:
-            await run_security_agent(self.store, family_id, review_id)
+            await asyncio.to_thread(asyncio.run, run_security_agent(self.store, family_id, review_id))
             self._publish(family_id, review_id)
         except asyncio.CancelledError:
             self.store.set_security_review(review_id, status="queued")

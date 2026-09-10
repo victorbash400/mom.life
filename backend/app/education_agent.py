@@ -73,7 +73,7 @@ class EducationAgentManager:
     async def _review(self, family_id: str, review_id: str) -> None:
         self.store.set_education_review(review_id, status="processing", failure="")
         try:
-            await run_education_agent(self.store, family_id, review_id)
+            await asyncio.to_thread(asyncio.run, run_education_agent(self.store, family_id, review_id))
             family_events.publish(family_id, {"type": "education_changed"})
         except asyncio.CancelledError:
             self.store.set_education_review(review_id, status="queued")
