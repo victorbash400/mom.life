@@ -1,4 +1,7 @@
 :root {
+  --font-sans: "SF Pro Text", "SF Pro Display", -apple-system, BlinkMacSystemFont, "Helvetica Neue", Arial, sans-serif;
+  --font-display: "SF Pro Display", "SF Pro Text", -apple-system, BlinkMacSystemFont, "Helvetica Neue", Arial, sans-serif;
+  --font-life: "SF Pro Display", "SF Pro Text", -apple-system, BlinkMacSystemFont, "Helvetica Neue", Arial, sans-serif;
   --ink: #302b31;
   --muted: #7b7379;
   --cream: #fbf6ef;
@@ -19,7 +22,10 @@ body {
   margin: 0;
   color: var(--ink);
   background: #fff;
-  font-family: var(--font-sans), sans-serif;
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
 }
 
 button, input { font: inherit; }
