@@ -4,7 +4,7 @@ import { useCallback, useEffect, useState } from "react";
 import type { SimulatorState } from "../types/simulator";
 
 
-export function useSimulator(afterMutation?: () => Promise<void>) {
+export function useSimulator(afterMutation?: () => Promise<void>, enabled = true) {
   const [state, setState] = useState<SimulatorState>();
   const [error, setError] = useState<string>();
   const [busy, setBusy] = useState(false);
@@ -14,7 +14,11 @@ export function useSimulator(afterMutation?: () => Promise<void>) {
     if (!response.ok) throw new Error(payload.error || "Could not load the simulator.");
     setState(payload); setError(undefined);
   }, []);
-  useEffect(() => { const frame = requestAnimationFrame(() => void refresh().catch((reason) => setError(message(reason)))); return () => cancelAnimationFrame(frame); }, [refresh]);
+  useEffect(() => {
+    if (!enabled) return;
+    const frame = requestAnimationFrame(() => void refresh().catch((reason) => setError(message(reason))));
+    return () => cancelAnimationFrame(frame);
+  }, [enabled, refresh]);
   async function run(path: string, method: "POST" | "PUT" | "DELETE", body?: object) {
     setBusy(true); setError(undefined);
     try {

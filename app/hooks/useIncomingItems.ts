@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { subscribeFamilyEvents } from "../lib/familyEvents";
 
 import type { IncomingItem } from "../types/intake";
@@ -9,6 +9,7 @@ export function useIncomingItems() {
   const [items, setItems] = useState<IncomingItem[]>([]);
   const [loaded, setLoaded] = useState(false);
   const [error, setError] = useState<string>();
+  const connectedOnce = useRef(false);
 
   const refresh = useCallback(async () => {
     try {
@@ -44,7 +45,11 @@ export function useIncomingItems() {
     const frame = requestAnimationFrame(() => void refresh());
     const unsubscribe = subscribeFamilyEvents({
       onEvent: (event) => { if (event.type === "intake_changed") void refresh(); },
-      onConnection: (connected) => { connected ? void refresh() : setError("Live intake updates are disconnected. Reconnecting…"); },
+      onConnection: (connected) => {
+        if (!connected) return setError("Live intake updates are disconnected. Reconnecting…");
+        if (connectedOnce.current) void refresh();
+        connectedOnce.current = true;
+      },
     });
     return () => { cancelAnimationFrame(frame); unsubscribe(); };
   }, [refresh]);

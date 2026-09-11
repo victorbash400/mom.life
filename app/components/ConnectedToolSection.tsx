@@ -11,7 +11,7 @@ type Connections = ReturnType<typeof useToolConnections>;
 
 export function ConnectedToolSection({ busy, connections, onRun, state, tool}: { busy: boolean; connections: Connections; onRun: (action: () => Promise<void>) => Promise<void>; state: ToolState; tool: ToolDefinition }) {
   const simulated = state.connection_mode === "simulated";
-  const connectLive = state.oauth_supported ? () => connections.authorize(tool.id) : () => connections.validate(tool.id);
+  const connectLive = state.oauth_supported && !state.account_label ? () => connections.authorize(tool.id) : () => connections.validate(tool.id);
   return <section className={styles.section}>
     <h2>{tool.name}</h2>
     <details className={styles.plugin}>

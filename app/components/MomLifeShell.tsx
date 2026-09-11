@@ -20,8 +20,8 @@ export function MomLifeShell() {
   const [selectedChildId, setSelectedChildId] = useState<string>();
   const [parentSettingsView, setParentSettingsView] = useState<ParentSettingsView>("profile");
   const connections = useToolConnections();
-  const security = useSecurity();
-  const simulator = useSimulator(connections.refresh);
+  const security = useSecurity(mode === "security");
+  const simulator = useSimulator(connections.refresh, mode === "simulator");
   const visibleMode = (mode === "child" || mode === "child-info") && !children.some((child) => child.id === selectedChildId) ? "home" : mode;
   const selectedChild = children.find((child) => child.id === selectedChildId);
 
@@ -29,13 +29,14 @@ export function MomLifeShell() {
   function openParent() { setSelectedChildId(undefined); setMode("parent"); }
   function openChildManagement() { setSelectedChildId(undefined); setParentSettingsView("children"); setMode("parent-settings"); }
   function openCalendar() { setSelectedChildId(undefined); setMode("calendar"); }
+  function openTasks() { setSelectedChildId(undefined); setMode("tasks"); }
   function openIncoming() { setSelectedChildId(undefined); setMode("incoming"); }
   function openEducation() { setSelectedChildId((current) => current ?? children[0]?.id); setMode("education"); }
   function openSecurity() { setSelectedChildId(undefined); setMode("security"); }
   function openPlugins() { setSelectedChildId(undefined); setMode("plugins"); }
-  function openSimulator() { setSelectedChildId(undefined); void simulator.refresh(); setMode("simulator"); }
+  function openSimulator() { setSelectedChildId(undefined); setMode("simulator"); }
   function changeMode(next: PanelMode) { if (next === "parent-settings") setParentSettingsView("profile"); setMode(next); }
   function returnHome() { setSelectedChildId(undefined); setMode("home"); }
 
-  return <main className={styles.shell} data-mode={visibleMode}><AppHeader calendarOpen={visibleMode === "calendar"} educationOpen={visibleMode === "education"} incomingOpen={visibleMode === "incoming"} onCalendarOpen={openCalendar} onChildrenOpen={openChildManagement} onEducationOpen={openEducation} onIncomingOpen={openIncoming} onProfileOpen={openParent} pluginsOpen={visibleMode === "plugins"} onPluginsOpen={openPlugins} onSecurityOpen={openSecurity} onSimulatorOpen={openSimulator} securityAlertCount={security.reviews.filter((review) => review.status === "completed" && review.action === "alert" && !review.dismissed).length} securityOpen={visibleMode === "security"} simulatorOpen={visibleMode === "simulator"} /><ChildSwitcher focused={mode === "child" || mode === "child-info" || mode === "education" || (mode === "tasks" && Boolean(selectedChild))} onSelect={selectChild} selectedId={selectedChildId} /><ActionPanel child={selectedChild} connections={connections} mode={visibleMode} onModeChange={changeMode} onReturnHome={returnHome} parentSettingsView={parentSettingsView} security={security} simulator={simulator} /></main>;
+  return <main className={styles.shell} data-mode={visibleMode}><AppHeader calendarOpen={visibleMode === "calendar"} educationOpen={visibleMode === "education"} incomingOpen={visibleMode === "incoming"} onCalendarOpen={openCalendar} onChildrenOpen={openChildManagement} onEducationOpen={openEducation} onIncomingOpen={openIncoming} onProfileOpen={openParent} pluginsOpen={visibleMode === "plugins"} onPluginsOpen={openPlugins} onSecurityOpen={openSecurity} onSimulatorOpen={openSimulator} onTasksOpen={openTasks} securityAlertCount={security.alertCount} securityOpen={visibleMode === "security"} simulatorOpen={visibleMode === "simulator"} tasksOpen={visibleMode === "tasks"} /><ChildSwitcher focused={mode === "child" || mode === "child-info" || mode === "education" || (mode === "tasks" && Boolean(selectedChild))} onSelect={selectChild} selectedId={selectedChildId} /><ActionPanel child={selectedChild} connections={connections} mode={visibleMode} onModeChange={changeMode} onReturnHome={returnHome} parentSettingsView={parentSettingsView} security={security} simulator={simulator} /></main>;
 }

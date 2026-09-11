@@ -8,6 +8,7 @@ export type { FamilyTask } from "../types/goals";
 export function useFamilyTasks() {
   const { family } = useFamily();
   const revisionRef = useRef(0);
+  const connectedOnce = useRef(false);
   const [tasks, setTasks] = useState<FamilyTask[]>([]);
   const [loaded, setLoaded] = useState(false);
   const [error, setError] = useState<string>();
@@ -25,7 +26,12 @@ export function useFamilyTasks() {
     }
     const unsubscribe = subscribeFamilyEvents({
       onEvent: (event) => { if (event.type === "goals_changed") void refresh(); },
-      onConnection: (connected) => { if (active) connected ? void refresh() : setError("Live task updates are disconnected. Reconnecting…"); },
+      onConnection: (connected) => {
+        if (!active) return;
+        if (!connected) return setError("Live task updates are disconnected. Reconnecting…");
+        if (connectedOnce.current) void refresh();
+        connectedOnce.current = true;
+      },
     });
     void refresh();
     return () => { active = false; unsubscribe(); };
