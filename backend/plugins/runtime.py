@@ -10,6 +10,15 @@ from .catalog import plugin_by_id
 from .namespaces import namespaces, owner, WORKSPACE_ENDPOINTS, WORKSPACE_PERMISSION_IDS
 
 
+TOOL_PERMISSION_IDS = {
+    'google-classroom': {
+        'list_courses': 'google-classroom.0',
+        'list_coursework': 'google-classroom.1',
+        'list_announcements': 'google-classroom.2',
+    },
+}
+
+
 class PluginToolSession:
     """Load only permitted namespaces and retain their connections for one run."""
 
@@ -66,7 +75,12 @@ class PluginToolSession:
             from plugins.api_adapters import ApiAdapter
             adapter = ApiAdapter(plugin_id, self.family_id, token=await self.oauth_token(plugin_id))
             self.clients[plugin_id] = adapter
-            self.loaded[plugin_id] = adapter.directory()
+            permissions = self.store.permissions(self.family_id, plugin_id) if self.store else {}
+            permission_ids = TOOL_PERMISSION_IDS.get(plugin_id, {})
+            self.loaded[plugin_id] = [
+                tool for tool in adapter.directory()
+                if permissions.get(permission_ids.get(tool['name'], ''), True)
+            ]
             return self.loaded[plugin_id]
         url = setting(_env_name(plugin_id, 'URL')) or WORKSPACE_ENDPOINTS.get(plugin_id) or plugin.server_url
         oauth_token = await self.oauth_token(owner(plugin_id))
@@ -113,6 +127,10 @@ class PluginToolSession:
             if namespace in WORKSPACE_PERMISSION_IDS:
                 if not permissions.get(WORKSPACE_PERMISSION_IDS[namespace], True):
                     raise RuntimeError('This Google Workspace service is disabled for the family.')
+                return
+            if plugin_id in TOOL_PERMISSION_IDS:
+                if not any(permissions.get(permission_id, True) for permission_id in TOOL_PERMISSION_IDS[plugin_id].values()):
+                    raise RuntimeError(f'{plugin_by_id(plugin_id).name} has no enabled permissions.')
                 return
             # Coarse provider permissions cannot safely classify arbitrary MCP methods.
             if not all(permissions.get(f'{plugin_id}.{i}', True) for i in range(len(plugin_by_id(plugin_id).permissions))):

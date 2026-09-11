@@ -18,6 +18,12 @@ def security(request: Request) -> dict[str, object]:
     return {"settings": store.security_settings(request.state.family_id), "reviews": store.security_reviews(request.state.family_id)}
 
 
+@router.get("/summary")
+def security_summary(request: Request) -> dict[str, int]:
+    store, _ = services()
+    return {"alert_count": store.security_alert_count(request.state.family_id)}
+
+
 @router.patch("/settings")
 def update_settings(body: SecuritySettingsWrite, request: Request) -> dict[str, object]:
     store, _ = services()

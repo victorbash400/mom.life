@@ -189,8 +189,8 @@ def install_plugin(plugin_id: str, family_id: str) -> dict[str, object]:
         plugin = plugin_by_id(plugin_id)
     except ValueError as error:
         raise HTTPException(404, str(error)) from error
-    task_store.install_plugin(family_id, plugin_id)
-    return plugin_snapshot(plugin, True, task_store.permissions(family_id, plugin_id))
+    permissions = task_store.install_plugin(family_id, plugin_id)
+    return plugin_snapshot(plugin, True, permissions)
 
 
 @app.delete("/api/plugins/{plugin_id}", status_code=204)

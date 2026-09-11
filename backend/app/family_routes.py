@@ -29,13 +29,13 @@ def require_child(request, identity):
 @router.get('')
 def family(request: Request):
     identity = request.state.family_id
-    children = families.list_children(identity)
+    parent, children = families.snapshot(identity)
     for child in children:
         born = child['birth_date']
         today = date.today()
         years = today.year - born.year - ((today.month,today.day) < (born.month,born.day)) if born else None
         child.update(age=f'{years} years' if years is not None else '', color='#f4cfd5', avatarPosition='center')
-    return {'id':identity,'parent':families.profile(identity),'children':children}
+    return {'id':identity,'parent':parent,'children':children}
 
 
 @router.post('/children', status_code=201)

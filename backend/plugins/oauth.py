@@ -1,4 +1,5 @@
 """Registered OAuth clients with PKCE and encrypted family-bound tokens."""
+import asyncio
 import base64
 import binascii
 import hashlib
@@ -13,6 +14,7 @@ from cryptography.fernet import Fernet
 
 from plugins.configuration import setting
 from plugins.catalog import plugin_by_id
+from app.database import batch
 
 
 GOOGLE_WORKSPACE_SCOPES = {
@@ -39,6 +41,23 @@ GOOGLE_CLASSROOM_SCOPES = {
     'https://www.googleapis.com/auth/classroom.announcements.readonly',
 }
 
+GOOGLE_WORKSPACE_SCOPES |= GOOGLE_CLASSROOM_SCOPES
+CLASSROOM_COURSEWORK_SCOPE = 'https://www.googleapis.com/auth/classroom.coursework.me.readonly'
+CLASSROOM_COURSEWORK_ALIASES = {
+    CLASSROOM_COURSEWORK_SCOPE,
+    'https://www.googleapis.com/auth/classroom.student-submissions.me.readonly',
+}
+GOOGLE_IDENTITY_ALIASES = {
+    'https://www.googleapis.com/auth/userinfo.email': 'email',
+    'https://www.googleapis.com/auth/userinfo.profile': 'profile',
+}
+GOOGLE_CLASSROOM_CONNECTION_SCOPES = {
+    'openid',
+    'email',
+    'profile',
+    'https://www.googleapis.com/auth/classroom.courses.readonly',
+}
+
 GOOGLE_PLUGINS = {'google-workspace', 'google-classroom'}
 
 DYNAMIC_OAUTH_PROVIDERS = {
@@ -62,6 +81,7 @@ DYNAMIC_OAUTH_PROVIDERS = {
     },
 }
 _INITIALIZED_DATABASES = set()
+_CONFIG_CACHE = {}
 
 
 class OAuthConnections:
@@ -95,11 +115,12 @@ class OAuthConnections:
                 ''')
             _INITIALIZED_DATABASES.add(target)
 
-    def connection_snapshots(self, family_id, plugin_ids):
+    def connection_snapshots(self, family_id, plugin_ids, rows=None):
         if not plugin_ids:
             return {}
-        with self.store._connect() as db:
-            rows = db.execute('SELECT plugin_id,token FROM oauth_tokens WHERE family_id=?',(family_id,)).fetchall()
+        if rows is None:
+            with self.store._connect() as db:
+                rows = db.execute('SELECT plugin_id,token FROM oauth_tokens WHERE family_id=?',(family_id,)).fetchall()
         snapshots = {}
         for row in rows:
             if row['plugin_id'] not in plugin_ids:
@@ -128,11 +149,19 @@ class OAuthConnections:
     def _has_required_scopes(plugin_id, tokens):
         if plugin_id not in GOOGLE_PLUGINS:
             return True
-        required=GOOGLE_WORKSPACE_SCOPES if plugin_id == 'google-workspace' else GOOGLE_CLASSROOM_SCOPES
-        return required.issubset(set(tokens.get('scope','').split()))
+        required=GOOGLE_WORKSPACE_SCOPES if plugin_id == 'google-workspace' else GOOGLE_CLASSROOM_CONNECTION_SCOPES
+        granted=set(tokens.get('scope','').split())
+        granted |= {alias for scope,alias in GOOGLE_IDENTITY_ALIASES.items() if scope in granted}
+        if CLASSROOM_COURSEWORK_SCOPE in required:
+            required=required-{CLASSROOM_COURSEWORK_SCOPE}
+            return required.issubset(granted) and bool(CLASSROOM_COURSEWORK_ALIASES & granted)
+        return required.issubset(granted)
 
     def config(self,plugin_id):
         plugin_by_id(plugin_id)
+        cache_key=(str(self.store.database),plugin_id)
+        if cache_key in _CONFIG_CACHE:
+            return dict(_CONFIG_CACHE[cache_key])
         prefix='MOM_LIFE_PLUGIN_'+plugin_id.replace('-','_').upper()+'_OAUTH_'
         config={name.lower():setting(prefix+name) for name in ['AUTHORIZE_URL','TOKEN_URL','CLIENT_ID','CLIENT_SECRET','REDIRECT_URI','SCOPES','RESOURCE']}
         if plugin_id == 'google-classroom':
@@ -140,6 +169,8 @@ class OAuthConnections:
             for name in ['AUTHORIZE_URL','TOKEN_URL','CLIENT_ID','CLIENT_SECRET','REDIRECT_URI']:
                 config[name.lower()] = config[name.lower()] or setting(workspace_prefix+name)
             config['scopes'] = config['scopes'] or ' '.join(sorted(GOOGLE_CLASSROOM_SCOPES))
+        elif plugin_id == 'google-workspace':
+            config['scopes'] = ' '.join(sorted(set((config['scopes'] or '').split()) | GOOGLE_WORKSPACE_SCOPES))
         if not all(config[name] for name in ['authorize_url','token_url','client_id','redirect_uri','scopes']):
             with self.store._connect() as db:
                 registered=db.execute('SELECT config FROM oauth_clients WHERE plugin_id=?',(plugin_id,)).fetchone()
@@ -159,15 +190,15 @@ class OAuthConnections:
             raise ValueError('Configure every required Google Workspace OAuth scope.')
         if plugin_id == 'google-classroom' and not GOOGLE_CLASSROOM_SCOPES.issubset(config['scopes'].split()):
             raise ValueError('Configure every required Google Classroom read-only OAuth scope.')
+        _CONFIG_CACHE[cache_key]=dict(config)
         return config
 
     async def register_dynamic_client(self,plugin_id):
         provider=DYNAMIC_OAUTH_PROVIDERS.get(plugin_id)
         if not provider:
             return
-        with self.store._connect() as db:
-            if db.execute('SELECT plugin_id FROM oauth_clients WHERE plugin_id=?',(plugin_id,)).fetchone():
-                return
+        if await asyncio.to_thread(self.has_registered_config,plugin_id):
+            return
         redirect_uri=setting('MOM_LIFE_PLUGIN_'+plugin_id.replace('-','_').upper()+'_OAUTH_REDIRECT_URI') or 'http://localhost:3000/api/oauth/callback'
         async with httpx.AsyncClient(timeout=20,follow_redirects=False,transport=self.transport) as client:
             metadata_response=await client.get(provider['metadata_url'])
@@ -198,6 +229,10 @@ class OAuthConnections:
         }
         if not all(config[name] for name in ['authorize_url','token_url','client_id']):
             raise ValueError('OAuth provider returned an incomplete client registration.')
+        await asyncio.to_thread(self._store_registered_config,plugin_id,config)
+        _CONFIG_CACHE[(str(self.store.database),plugin_id)]=config
+
+    def _store_registered_config(self,plugin_id,config):
         encrypted=self.cipher.encrypt(json.dumps(config).encode()).decode()
         with self.store._connect() as db:
             db.execute('INSERT INTO oauth_clients VALUES (?,?) ON CONFLICT (plugin_id) DO NOTHING',(plugin_id,encrypted))
@@ -206,27 +241,40 @@ class OAuthConnections:
         prefix='MOM_LIFE_PLUGIN_'+plugin_id.replace('-','_').upper()+'_OAUTH_'
         if setting(prefix+'CLIENT_ID'):
             return True
+        cache_key=(str(self.store.database),plugin_id)
+        if cache_key in _CONFIG_CACHE:
+            return True
         with self.store._connect() as db:
-            return db.execute('SELECT plugin_id FROM oauth_clients WHERE plugin_id=?',(plugin_id,)).fetchone() is not None
+            row=db.execute('SELECT config FROM oauth_clients WHERE plugin_id=?',(plugin_id,)).fetchone()
+        if row:
+            _CONFIG_CACHE[cache_key]=json.loads(self.cipher.decrypt(row['config'].encode()))
+        return row is not None
 
     async def begin(self,family_id,plugin_id):
-        if plugin_id not in self.store.installed_plugins(family_id):
-            raise ValueError('Install the connection first.')
-        if plugin_id in DYNAMIC_OAUTH_PROVIDERS and not self.has_registered_config(plugin_id):
+        if plugin_id in DYNAMIC_OAUTH_PROVIDERS and not await asyncio.to_thread(self.has_registered_config,plugin_id):
             await self.register_dynamic_client(plugin_id)
-        config=self.config(plugin_id)
+        config=await asyncio.to_thread(self.config,plugin_id)
         state=secrets.token_urlsafe(32)
         verifier=secrets.token_urlsafe(64)
         challenge=base64.urlsafe_b64encode(hashlib.sha256(verifier.encode()).digest()).decode().rstrip('=')
-        with self.store._connect() as db:
-            db.execute('DELETE FROM oauth_attempts WHERE expires_at<?',(time.time(),))
-            db.execute('INSERT INTO oauth_attempts VALUES (?,?,?,?,?,?)',(hashlib.sha256(state.encode()).hexdigest(),family_id,plugin_id,self.cipher.encrypt(verifier.encode()).decode(),self.cipher.encrypt(json.dumps(config).encode()).decode(),time.time()+600))
+        await asyncio.to_thread(self._store_attempt,family_id,plugin_id,state,verifier,config)
         params={'response_type':'code','client_id':config['client_id'],'redirect_uri':config['redirect_uri'],'scope':config['scopes'],'state':state,'code_challenge':challenge,'code_challenge_method':'S256'}
         if plugin_id in GOOGLE_PLUGINS:
             params.update({'access_type':'offline','include_granted_scopes':'true','prompt':'consent'})
         if config['resource']:
             params['resource']=config['resource']
         return {'authorization_url':config['authorize_url']+('&' if '?' in config['authorize_url'] else '?')+urlencode(params)}
+
+    def _store_attempt(self,family_id,plugin_id,state,verifier,config):
+        with self.store._connect() as db:
+            with batch(db):
+                db.execute('DELETE FROM oauth_attempts WHERE expires_at<?',(time.time(),))
+                inserted = db.execute('''INSERT INTO oauth_attempts(state,family_id,plugin_id,verifier,config,expires_at)
+                    SELECT ?,?,?,?,?,? WHERE EXISTS (
+                        SELECT 1 FROM plugin_installations WHERE family_id=? AND plugin_id=?
+                    )''',(hashlib.sha256(state.encode()).hexdigest(),family_id,plugin_id,self.cipher.encrypt(verifier.encode()).decode(),self.cipher.encrypt(json.dumps(config).encode()).decode(),time.time()+600,family_id,plugin_id))
+            if inserted.rowcount != 1:
+                raise ValueError('Install the connection first.')
 
     async def finish(self,state,code):
         with self.store._connect() as db:
@@ -254,12 +302,21 @@ class OAuthConnections:
         if row['plugin_id'] in GOOGLE_PLUGINS and not tokens.get('refresh_token'):
             raise ValueError('Google did not return offline access. Reconnect and approve access again.')
         tokens['expires_at']=time.time()+float(tokens.get('expires_in',3600))
+        encrypted=self.cipher.encrypt(json.dumps(tokens).encode()).decode()
+        token_plugins=GOOGLE_PLUGINS if row['plugin_id'] in GOOGLE_PLUGINS else {row['plugin_id']}
+        connected_plugin_ids={row['plugin_id']}
         with self.store._connect() as db:
             if not db.execute('SELECT plugin_id FROM plugin_installations WHERE family_id=? AND plugin_id=?',(row['family_id'],row['plugin_id'])).fetchone():
                 raise ValueError('The connection was removed during authorization.')
-            db.execute('INSERT INTO oauth_tokens VALUES (?,?,?) ON CONFLICT (family_id,plugin_id) DO UPDATE SET token=excluded.token',(row['family_id'],row['plugin_id'],self.cipher.encrypt(json.dumps(tokens).encode()).decode()))
-            db.execute('DELETE FROM plugin_connections WHERE family_id=? AND plugin_id=?',(row['family_id'],row['plugin_id']))
-        return {'family_id':row['family_id'],'plugin_id':row['plugin_id'],'status':'authorized'}
+            with batch(db):
+                for token_plugin in token_plugins:
+                    db.execute('INSERT INTO oauth_tokens VALUES (?,?,?) ON CONFLICT (family_id,plugin_id) DO UPDATE SET token=excluded.token',(row['family_id'],token_plugin,encrypted))
+                    db.execute('DELETE FROM plugin_connections WHERE family_id=? AND plugin_id=?',(row['family_id'],token_plugin))
+                if row['plugin_id'] in GOOGLE_PLUGINS:
+                    installed_google=db.execute("SELECT plugin_id FROM plugin_installations WHERE family_id=? AND plugin_id IN ('google-workspace','google-classroom')",(row['family_id'],))
+            if row['plugin_id'] in GOOGLE_PLUGINS:
+                connected_plugin_ids={item['plugin_id'] for item in installed_google}
+        return {'family_id':row['family_id'],'plugin_id':row['plugin_id'],'plugin_ids':sorted(connected_plugin_ids),'status':'authorized'}
 
     def token(self,family_id,plugin_id):
         with self.store._connect() as db:

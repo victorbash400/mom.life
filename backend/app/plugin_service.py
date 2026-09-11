@@ -1,9 +1,12 @@
+import asyncio
+
 from app.task_store import now
 from plugins.catalog import PLUGINS, plugin_by_id, plugin_snapshot
 from plugins.runtime import PluginToolSession
 from plugins.namespaces import namespaces
 from plugins.namespaces import WORKSPACE_PERMISSION_IDS
 from plugins.configuration import setting
+from app.database import batch
 
 
 class PluginService:
@@ -11,16 +14,23 @@ class PluginService:
         self.store = store
 
     def list(self, family_id):
-        with self.store._connect() as db:
-            installed = {row['plugin_id'] for row in db.execute('SELECT plugin_id FROM plugin_installations WHERE family_id=?',(family_id,))}
-            simulated = {row['plugin_id'] for row in db.execute('SELECT plugin_id FROM simulator_connections WHERE family_id=?',(family_id,))}
-            validated = {row['plugin_id']:row['validated_at'] for row in db.execute('SELECT * FROM plugin_connections WHERE family_id=?',(family_id,))}
-            permissions = {}
-            for row in db.execute('SELECT plugin_id,permission_id,enabled FROM plugin_permissions WHERE family_id=?',(family_id,)):
-                permissions.setdefault(row['plugin_id'], {})[row['permission_id']] = bool(row['enabled'])
         from plugins.oauth import OAuthConnections
         oauth = OAuthConnections(self.store)
-        oauth_states = oauth.connection_snapshots(family_id, installed)
+        with self.store._connect() as db:
+            with batch(db):
+                installed_cursor = db.execute('SELECT plugin_id FROM plugin_installations WHERE family_id=?',(family_id,))
+                simulated_cursor = db.execute('SELECT plugin_id FROM simulator_connections WHERE family_id=?',(family_id,))
+                validated_cursor = db.execute('SELECT * FROM plugin_connections WHERE family_id=?',(family_id,))
+                permissions_cursor = db.execute('SELECT plugin_id,permission_id,enabled FROM plugin_permissions WHERE family_id=?',(family_id,))
+                oauth_cursor = db.execute('SELECT plugin_id,token FROM oauth_tokens WHERE family_id=?',(family_id,))
+            installed = {row['plugin_id'] for row in installed_cursor}
+            simulated = {row['plugin_id'] for row in simulated_cursor}
+            validated = {row['plugin_id']:row['validated_at'] for row in validated_cursor}
+            permissions = {}
+            for row in permissions_cursor:
+                permissions.setdefault(row['plugin_id'], {})[row['permission_id']] = bool(row['enabled'])
+            oauth_rows = oauth_cursor.fetchall()
+        oauth_states = oauth.connection_snapshots(family_id, installed, oauth_rows)
         return [{**plugin_snapshot(plugin,plugin.id in installed,permissions.get(plugin.id, {})),
                  'connected':plugin.id in installed and oauth_states.get(plugin.id, {}).get('authorized', plugin.id not in {'google-workspace','google-classroom'}) and (plugin.id in validated or plugin.id in simulated),
                  'connection_mode':'simulated' if plugin.id in simulated else ('live' if plugin.id in validated else None),
@@ -51,8 +61,7 @@ class PluginService:
             for namespace in enabled_namespaces:
                 directory.extend(await session.load(namespace))
             if plugin_id == 'google-workspace':
-                for namespace in enabled_namespaces:
-                    await session.clients[namespace].validate()
+                await asyncio.gather(*(session.clients[namespace].validate() for namespace in enabled_namespaces))
             elif plugin_id in {'whatsapp','google-classroom','fitbit','withings','apple-health'}:
                 await session.clients[plugin_id].validate()
             elif plugin_id == 'agentcore-browser':

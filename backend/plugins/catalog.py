@@ -16,8 +16,8 @@ class Plugin:
 
 
 PLUGINS = (
-    Plugin("google-workspace", "Google Workspace", "Gmail, Calendar, Drive, and Docs", "Family essentials", "custom-mcp", None, "oauth", ("Gmail", "Google Drive", "Google Docs", "Google Calendar"), "Connect a Google account with access to the selected Workspace services."),
-    Plugin("google-classroom", "Google Classroom", "Courses, assignments, announcements, and due dates", "Education", "custom-mcp", None, "oauth", ("Read the signed-in student's courses and class posts", "Read assignment and due-date details"), "Connect the Google account that belongs to the Classroom courses you want mom.life to read."),
+    Plugin("google-workspace", "Google Workspace", "Gmail, Calendar, Drive, Docs, and Classroom", "Family essentials", "custom-mcp", None, "oauth", ("Gmail", "Google Drive", "Google Docs", "Google Calendar"), "Connect one Google account for Workspace and Classroom."),
+    Plugin("google-classroom", "Google Classroom", "Courses, assignments, announcements, and due dates", "Education", "custom-mcp", None, "oauth", ("Read courses", "Read coursework and due dates", "Read announcements"), "Connect the Google account that belongs to the Classroom courses you want mom.life to read."),
     Plugin("todoist", "Todoist", "Household tasks, routines, and shared lists", "Family essentials", "mcp", "https://ai.todoist.net/mcp", "oauth", ("Read selected projects and tasks", "Create and update household tasks"), "Connect Todoist with its official OAuth flow."),
     Plugin("instacart", "Instacart", "Create grocery and recipe shopping lists", "Shopping and home", "mcp", "https://mcp.instacart.com/mcp", "bearer", ("Create recipe pages", "Create requested shopping-list pages"), "Set MOM_LIFE_PLUGIN_INSTACART_TOKEN to an Instacart Developer Platform API key."),
     Plugin("google-maps", "Google Maps", "Find places, routes, travel times, and weather", "Family essentials", "mcp", "https://mapstools.googleapis.com/mcp", "api-key", ("Search places and local services", "Calculate routes and look up weather"), "Google Maps uses mom.life's restricted server key. It does not access family location sharing."),

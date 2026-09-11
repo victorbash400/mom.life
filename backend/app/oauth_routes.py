@@ -1,3 +1,5 @@
+import asyncio
+
 from fastapi import APIRouter, HTTPException
 import httpx
 from pydantic import BaseModel, Field
@@ -27,7 +29,9 @@ async def callback(body: Callback):
     try:
         result = await OAuthConnections(task_store).finish(body.state,body.code)
         from app.plugin_service import PluginService
-        await PluginService(task_store).validate(result['family_id'],result['plugin_id'])
+        plugin_ids = result.get('plugin_ids') or [result['plugin_id']]
+        service = PluginService(task_store)
+        await asyncio.gather(*(service.validate(result['family_id'], plugin_id) for plugin_id in plugin_ids))
         result['status'] = 'connected'
         return result
     except (ValueError,RuntimeError,httpx.HTTPError) as error:

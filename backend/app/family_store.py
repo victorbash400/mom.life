@@ -1,6 +1,6 @@
 """Family ownership and child/folder records in PostgreSQL."""
 from uuid import uuid4
-from app.database import connect
+from app.database import batch, connect
 
 
 class FamilyStore:
@@ -107,6 +107,15 @@ class FamilyStore:
         with connect(self.url) as db:
             row = db.execute('SELECT id,name,email FROM accounts WHERE family_id=? ORDER BY created_at LIMIT 1', (family_id,)).fetchone()
         return row or {'id': 'sarah', 'name': 'Sarah', 'email': 'demo@mom.life'}
+
+    def snapshot(self, family_id):
+        with connect(self.url) as db:
+            with batch(db):
+                parent_cursor = db.execute('SELECT id,name,email FROM accounts WHERE family_id=? ORDER BY created_at LIMIT 1', (family_id,))
+                children_cursor = db.execute('SELECT id,name,birth_date,avatar_seed,photo_version,email_updates,text_updates,notifications,photo IS NOT NULL AS has_photo FROM children WHERE family_id=? ORDER BY created_at,id', (family_id,))
+            parent = parent_cursor.fetchone()
+            children = children_cursor.fetchall()
+        return parent or {'id': 'sarah', 'name': 'Sarah', 'email': 'demo@mom.life'}, children
 
     def child(self, family_id, identity):
         with connect(self.url) as db:

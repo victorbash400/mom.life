@@ -28,7 +28,10 @@ class Record(dict):
 class Cursor:
     def __init__(self, cursor):
         self.cursor = cursor
-        self.rowcount = cursor.rowcount
+
+    @property
+    def rowcount(self):
+        return self.cursor.rowcount
 
     def fetchone(self):
         row = self.cursor.fetchone()
@@ -58,10 +61,20 @@ class Connection:
     def executemany(self, query, params):
         query = re.sub(r'\bREAL\b', 'DOUBLE PRECISION', query)
         query = query.replace('?', '%s')
-        return Cursor(self.connection.executemany(query, params))
+        return Cursor(self.connection.cursor().executemany(query, params))
 
     def executescript(self, script):
         self.connection.execute(script)
+
+
+@contextmanager
+def batch(connection):
+    """Send independent PostgreSQL reads together; SQLite fixtures stay synchronous."""
+    if isinstance(connection, Connection):
+        with connection.connection.pipeline():
+            yield
+        return
+    yield
 
 
 @contextmanager
@@ -79,7 +92,14 @@ def connect(target):
     if not str(target).startswith(('postgresql://', 'postgres://')):
         raise ValueError('MOM_LIFE_DATABASE_URL must be a PostgreSQL connection URL.')
     if target not in _pools:
-        pool = ConnectionPool(target, min_size=4, max_size=10, kwargs={'row_factory': dict_row}, open=False)
+        pool = ConnectionPool(
+            target,
+            min_size=4,
+            max_size=10,
+            kwargs={'row_factory': dict_row, 'connect_timeout': 5},
+            check=ConnectionPool.check_connection,
+            open=False,
+        )
         pool.open(wait=True)
         _pools[target] = pool
     with _pools[target].connection() as connection:

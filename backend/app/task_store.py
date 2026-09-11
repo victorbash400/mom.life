@@ -10,7 +10,7 @@ def now() -> str:
 
 
 from app.goal_ledger import GoalLedger
-from app.database import connect, table_exists
+from app.database import batch, connect, table_exists
 
 
 class TaskStore(GoalLedger):
@@ -199,18 +199,24 @@ class TaskStore(GoalLedger):
 
     def list(self, family_id: str) -> list[dict[str, object]]:
         with self._connect() as connection:
-            rows = connection.execute("SELECT * FROM family_tasks WHERE family_id=? ORDER BY created_at DESC", (family_id,)).fetchall()
-            assignments = connection.execute("""SELECT assignment.* FROM goal_assignments assignment
+            with batch(connection):
+                rows_cursor = connection.execute("SELECT * FROM family_tasks WHERE family_id=? ORDER BY created_at DESC", (family_id,))
+                assignments_cursor = connection.execute("""SELECT assignment.* FROM goal_assignments assignment
                 JOIN family_tasks goal ON goal.id=assignment.goal_id
-                WHERE goal.family_id=? ORDER BY assignment.created_at""", (family_id,)).fetchall()
-            questions = connection.execute("""SELECT question.* FROM goal_questions question
+                WHERE goal.family_id=? ORDER BY assignment.created_at""", (family_id,))
+                questions_cursor = connection.execute("""SELECT question.* FROM goal_questions question
                 JOIN family_tasks goal ON goal.id=question.goal_id
-                WHERE goal.family_id=? ORDER BY question.created_at""", (family_id,)).fetchall()
-            activities = connection.execute("""SELECT activity.* FROM goal_activities activity
+                WHERE goal.family_id=? ORDER BY question.created_at""", (family_id,))
+                activities_cursor = connection.execute("""SELECT activity.* FROM goal_activities activity
                 JOIN family_tasks goal ON goal.id=activity.goal_id
-                WHERE goal.family_id=? ORDER BY activity.created_at""", (family_id,)).fetchall()
+                WHERE goal.family_id=? ORDER BY activity.created_at""", (family_id,))
+                skills_cursor = connection.execute("SELECT * FROM family_skills WHERE family_id=?", (family_id,))
+            rows = rows_cursor.fetchall()
+            assignments = assignments_cursor.fetchall()
+            questions = questions_cursor.fetchall()
+            activities = activities_cursor.fetchall()
             skills = {skill["id"]: {**dict(skill), "required_plugin_ids": json.loads(skill["required_plugin_ids"])}
-                      for skill in connection.execute("SELECT * FROM family_skills WHERE family_id=?", (family_id,))}
+                      for skill in skills_cursor}
         assignments_by_goal: dict[str, list[dict[str, object]]] = {}
         from plugins.namespaces import namespaces
         for row in assignments:
@@ -403,6 +409,15 @@ class TaskStore(GoalLedger):
             ).fetchall()
             return [self._security_snapshot(connection, row) for row in rows]
 
+    def security_alert_count(self, family_id: str) -> int:
+        with self._connect() as connection:
+            row = connection.execute(
+                """SELECT count(*) AS total FROM security_reviews
+                WHERE family_id=? AND status='completed' AND action='alert' AND dismissed=0""",
+                (family_id,),
+            ).fetchone()
+        return int(row["total"])
+
     def set_security_review(self, review_id: str, **changes: object) -> None:
         allowed = {"status", "action", "severity", "category", "summary", "reason", "child_id", "dismissed", "failure", "processed_at"}
         values = {key: value for key, value in changes.items() if key in allowed}
@@ -582,9 +597,15 @@ class TaskStore(GoalLedger):
             result = connection.execute("DELETE FROM family_tasks WHERE id=?", (task_id,))
             return result.rowcount > 0
 
-    def install_plugin(self, family_id: str, plugin_id: str) -> None:
+    def install_plugin(self, family_id: str, plugin_id: str) -> dict[str, bool]:
         with self._connect() as connection:
-            connection.execute("INSERT INTO plugin_installations VALUES (?,?,?) ON CONFLICT DO NOTHING", (family_id, plugin_id, now()))
+            with batch(connection):
+                connection.execute("INSERT INTO plugin_installations VALUES (?,?,?) ON CONFLICT DO NOTHING", (family_id, plugin_id, now()))
+                permissions = connection.execute(
+                    "SELECT permission_id,enabled FROM plugin_permissions WHERE family_id=? AND plugin_id=?",
+                    (family_id, plugin_id),
+                )
+            return {row[0]: bool(row[1]) for row in permissions}
 
     def uninstall_plugin(self, family_id: str, plugin_id: str) -> None:
         with self._connect() as connection:

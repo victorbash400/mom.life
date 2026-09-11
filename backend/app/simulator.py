@@ -5,6 +5,7 @@ from types import SimpleNamespace
 from uuid import uuid4
 
 from plugins.apple_health_adapter import AppleHealthAdapter
+from app.database import batch
 
 
 SIMULATED_PLUGINS = {"whatsapp", "apple-health", "fitbit", "withings", "instacart"}
@@ -31,12 +32,18 @@ class SimulatorService:
         AppleHealthAdapter(family_id, self.store)
         target_date = date.today().isoformat()
         with self.store._connect() as db:
-            parent = db.execute('SELECT name FROM accounts WHERE family_id=? ORDER BY created_at LIMIT 1', (family_id,)).fetchone()
-            children = db.execute('SELECT id,name FROM children WHERE family_id=? ORDER BY created_at,id', (family_id,)).fetchall()
-            connected = {row['plugin_id'] for row in db.execute('SELECT plugin_id FROM simulator_connections WHERE family_id=?', (family_id,))}
-            messages = db.execute('SELECT * FROM simulator_messages WHERE family_id=? ORDER BY created_at DESC LIMIT 80', (family_id,)).fetchall()
-            health = db.execute("""SELECT child_id,sample_type,start_at,end_at,value,unit FROM apple_health_samples
-                WHERE family_id=? AND substr(start_at,1,10)=? AND source='mom.life Simulator'""", (family_id, target_date)).fetchall()
+            with batch(db):
+                parent_cursor = db.execute('SELECT name FROM accounts WHERE family_id=? ORDER BY created_at LIMIT 1', (family_id,))
+                children_cursor = db.execute('SELECT id,name FROM children WHERE family_id=? ORDER BY created_at,id', (family_id,))
+                connected_cursor = db.execute('SELECT plugin_id FROM simulator_connections WHERE family_id=?', (family_id,))
+                messages_cursor = db.execute('SELECT * FROM simulator_messages WHERE family_id=? ORDER BY created_at DESC LIMIT 80', (family_id,))
+                health_cursor = db.execute("""SELECT child_id,sample_type,start_at,end_at,value,unit FROM apple_health_samples
+                    WHERE family_id=? AND substr(start_at,1,10)=? AND source='mom.life Simulator'""", (family_id, target_date))
+            parent = parent_cursor.fetchone()
+            children = children_cursor.fetchall()
+            connected = {row['plugin_id'] for row in connected_cursor}
+            messages = messages_cursor.fetchall()
+            health = health_cursor.fetchall()
         profiles = [{"id": "parent", "name": parent["name"] if parent else "Sarah", "role": "adult"}]
         profiles.extend({"id": child["id"], "name": child["name"], "role": "child"} for child in children)
         return {
