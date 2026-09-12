@@ -49,7 +49,7 @@ async def run_worker(prompt, plugins, on_progress: Callable, expected_outputs, s
 
     @tool
     def wait_for_provider_event(plugin_id: str, correlation: str, reason: str) -> dict:
-        """Stop until a specific WhatsApp sender replies. Use an observed sender ID."""
+        """Stop until a specific WhatsApp sender replies. Use the message receipt's reply_correlation for a simulated recipient, or an observed sender ID for live WhatsApp."""
         if plugin_id != 'whatsapp' or plugin_id not in plugins.plugin_ids:
             raise ValueError('This assignment has no supported event provider.')
         from app.provider_events import ProviderEvents

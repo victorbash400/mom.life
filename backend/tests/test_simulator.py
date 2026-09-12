@@ -119,10 +119,18 @@ def test_simulated_providers_are_connected_and_callable_by_assignments(tmp_path,
     asyncio.run(whatsapp.load("whatsapp"))
     from app.event_stream import family_events
     updates = family_events.subscribe('family')
-    asyncio.run(whatsapp.call("whatsapp", "send_text", {"to": "child", "text": "Your form is ready."}, "message"))
+    receipt = asyncio.run(whatsapp.call("whatsapp", "send_text", {"to": "child", "text": "Your form is ready."}, "message"))
     assert updates.get_nowait()['type'] == 'simulator_changed'
     family_events.unsubscribe('family', updates)
     assert store.simulator_messages("family")[-1]["direction"] == "outgoing"
+    goal = store.create('family', 'child', 'Wait for the child to confirm')
+    assignment = store.create_assignment(goal['id'], {'title':'Await confirmation', 'instruction':'Wait for the reply', 'expected_outputs':['Reply']})
+    store.set_assignment(assignment, status='blocked')
+    from app.provider_events import ProviderEvents
+    ProviderEvents(store).wait('family', goal['id'], assignment, 'whatsapp', receipt['data']['reply_correlation'])
+    routed = store.receive_simulator_incoming('family', 'child', 'Noah', 'Confirmed', 'reply-test', {'child_id':'child'})
+    assert routed['goal_ids'] == [goal['id']]
+    assert store.assignment(assignment)['status'] == 'queued'
 
     instacart = PluginToolSession(["instacart"], store, "family")
     asyncio.run(instacart.load("instacart"))
