@@ -6,6 +6,27 @@ from uuid import uuid4
 class GoalLedger:
     """Transactional plan revisions and the durable human handoff ledger."""
 
+    def automation_parent(self, goal_id):
+        with self._connect() as db:
+            return db.execute("""SELECT a.goal_id FROM automation_run_links r
+                LEFT JOIN automations a ON a.id=r.automation_id WHERE r.run_goal_id=?""", (goal_id,)).fetchone()
+
+    def notify_runtime_completion(self, goal_id):
+        from app.database import Connection
+        with self._connect() as db:
+            if isinstance(db, Connection):
+                db.execute("SELECT pg_notify('mom_life_automations',?)", (goal_id,))
+
+    def finish_provider_wait(self, goal_id, assignment_id, reason):
+        with self._connect() as db:
+            db.execute("BEGIN IMMEDIATE")
+            waiting = db.execute("SELECT id FROM provider_waits WHERE assignment_id=? AND state='waiting'", (assignment_id,)).fetchone()
+            phase = "external_wait" if waiting else "queued"
+            status = "blocked" if waiting else "queued"
+            db.execute("UPDATE goal_assignments SET status=?,phase=?,current_step=? WHERE id=?", (status, phase, reason, assignment_id))
+            db.execute("UPDATE family_tasks SET run_state=?,current_step=? WHERE id=?", (status, reason, goal_id))
+        return status
+
     def apply_plan(self, family_id, goal_id, operations):
         from app.task_store import now
         with self._connect() as db:

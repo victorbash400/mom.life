@@ -1,3 +1,4 @@
+import asyncio
 from datetime import datetime
 
 from fastapi import APIRouter, HTTPException, Request
@@ -40,7 +41,7 @@ class HealthSync(BaseModel):
 
 
 @router.post('/api/plugins/apple-health/sync')
-def sync_health(request: Request,body: HealthSync):
+async def sync_health(request: Request,body: HealthSync):
     from app.auth import families
     from app.main import task_store
     family_id=request.state.family_id
@@ -54,6 +55,9 @@ def sync_health(request: Request,body: HealthSync):
         if sample.end_at < sample.start_at:
             raise HTTPException(400,'A HealthKit sample cannot end before it starts.')
     try:
-        return AppleHealthAdapter(family_id,task_store).sync(body.samples,body.deleted_ids)
+        result = await asyncio.to_thread(AppleHealthAdapter(family_id,task_store).sync, body.samples,body.deleted_ids)
+        from app.main import automations
+        await automations.recover()
+        return result
     except ValueError as error:
         raise HTTPException(400,str(error)) from error

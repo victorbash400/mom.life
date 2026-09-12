@@ -6,6 +6,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 from app.task_store import TaskStore
+from app.automation_store import AutomationStore
 from plugins.apple_health_adapter import AppleHealthAdapter
 
 
@@ -44,6 +45,28 @@ def test_apple_health_sync_replaces_changes_and_applies_deletions(tmp_path):
     assert adapter.sync([],['healthkit-1'])['data']['sample_count']==0
     with pytest.raises(ValueError,match='normalized unit'):
         adapter.sync([sample(unit='steps')],[])
+
+
+def test_identical_health_sync_does_not_wake_an_automation_twice(tmp_path):
+    store=TaskStore(tmp_path/'health.db')
+    goal=store.create('family','child','Monitor sleep.')
+    automations=AutomationStore(store)
+    automation=automations.create('family',goal['id'],'Check sleep.','health',enabled=True,scheduler_state='ready')
+    adapter=AppleHealthAdapter('family',store)
+
+    adapter.sync([sample()],[])
+    first=automations.next_wake('family',goal['id'])
+    assert first is not None
+    adapter.sync([sample()],[])
+    with store._connect() as db:
+        wakes=db.execute('SELECT COUNT(*) AS count FROM automation_wakes WHERE automation_id=?',(automation['id'],)).fetchone()
+    assert wakes['count']==1
+
+    adapter.sync([sample(value=2400)],[])
+    with store._connect() as db:
+        rows=db.execute('SELECT context FROM automation_wakes WHERE automation_id=? ORDER BY created_at',(automation['id'],)).fetchall()
+    assert len(rows)==2
+    assert '2026-09-09' in rows[-1]['context']
 
 
 def test_companion_sync_requires_session_installation_and_owned_child(tmp_path,monkeypatch,auth_headers):

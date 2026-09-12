@@ -36,7 +36,7 @@ async def receive(request: Request):
         payload=json.loads(body)
     except ValueError as error:
         raise HTTPException(400,'Invalid webhook JSON.') from error
-    from app.main import intake_agent,task_store,goal_tasks
+    from app.main import automations,intake_agent,task_store,goal_tasks
     family_id=setting('MOM_LIFE_PLUGIN_WHATSAPP_FAMILY_ID')
     phone_id=setting('MOM_LIFE_PLUGIN_WHATSAPP_PHONE_NUMBER_ID')
     if not family_id or not phone_id:
@@ -64,4 +64,5 @@ async def receive(request: Request):
     for goal_id in set(wake):
         await goal_tasks.start(family_id,goal_id)
         family_events.publish(family_id,{'type':'goals_changed','goal_id':goal_id})
+    await automations.recover()
     return {'status':'received'}

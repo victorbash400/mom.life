@@ -148,6 +148,17 @@ def test_scheduler_failure_is_visible(system):
     assert not item['enabled'] and item['scheduler_state'] == 'error'
     assert item['failure'] == 'AWS access denied'
 
+
+def test_worker_tool_surfaces_scheduler_failure(system, monkeypatch):
+    tasks, parent, _, scheduler, manager = system
+    from app import main
+    from tools.automation_tools import automation_tools
+    scheduler.failure = 'AWS access denied'
+    monkeypatch.setattr(main, 'automations', manager)
+    create = next(tool for tool in automation_tools('family', parent['id']) if tool.tool_name == 'create_automation')
+    with pytest.raises(RuntimeError, match='AWS access denied'):
+        asyncio.run(create(instruction='Check later', trigger='time', schedule='rate(1 minute)', timezone='Africa/Nairobi'))
+
 def test_aws_payload_version_and_precision():
     captured = []
     client = SimpleNamespace(create_schedule=lambda **args:captured.append(args))

@@ -56,7 +56,7 @@ def disconnect(plugin_id: str, request: Request):
 @router.post("/whatsapp/messages", status_code=201)
 async def send_message(body: SimulatedMessage, request: Request, background_tasks: BackgroundTasks):
     from app.auth import families
-    from app.main import education_agent, family_events, goal_tasks, intake_agent, security_agent, task_store
+    from app.main import automations, education_agent, family_events, goal_tasks, intake_agent, security_agent, task_store
     family_id = request.state.family_id
     profile = families.profile(family_id) if body.profile_id == "parent" else families.child(family_id, body.profile_id)
     if not profile:
@@ -69,11 +69,11 @@ async def send_message(body: SimulatedMessage, request: Request, background_task
             f"{profile['name']} (Simulator)", body.text.strip(), event_id, payload)
     except ValueError as error:
         raise HTTPException(409, str(error)) from error
-    background_tasks.add_task(_route_message, family_id, routed, intake_agent, security_agent, education_agent, goal_tasks, family_events)
+    background_tasks.add_task(_route_message, family_id, routed, intake_agent, security_agent, education_agent, goal_tasks, automations, family_events)
     return {"status": "received", "event_id": event_id, "message": routed.get("message")}
 
 
-async def _route_message(family_id, routed, intake_agent, security_agent, education_agent, goal_tasks, family_events):
+async def _route_message(family_id, routed, intake_agent, security_agent, education_agent, goal_tasks, automations, family_events):
     family_events.publish(family_id, {"type": "simulator_changed"})
     if routed["created"]:
         await intake_agent.start(family_id, str(routed["incoming_id"]), known_runnable=True)
@@ -82,14 +82,18 @@ async def _route_message(family_id, routed, intake_agent, security_agent, educat
     for goal_id in routed["goal_ids"]:
         await goal_tasks.start(family_id, goal_id)
         family_events.publish(family_id, {"type": "goals_changed", "goal_id": goal_id})
+    await automations.recover()
 
 
 @router.put("/health")
-def update_health(body: SimulatedHealth, request: Request):
+async def update_health(body: SimulatedHealth, request: Request):
     try:
-        return service().update_health(
+        result = await asyncio.to_thread(service().update_health,
             request.state.family_id, body.child_id, body.date, body.steps, body.sleep_hours,
             body.heart_rate, body.active_energy, body.distance,
         )
+        from app.main import automations
+        await automations.recover()
+        return result
     except ValueError as error:
         raise HTTPException(400, str(error)) from error

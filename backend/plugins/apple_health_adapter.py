@@ -40,9 +40,29 @@ class AppleHealthAdapter:
             ))
         with self.store._connect() as db:
             db.execute('BEGIN IMMEDIATE')
+            incoming_ids = {row[1] for row in rows}
+            candidate_ids = incoming_ids | set(deleted_ids)
+            existing = {}
+            if candidate_ids:
+                placeholders = ','.join('?' for _ in candidate_ids)
+                stored = db.execute(f'''SELECT external_id,child_id,sample_type,start_at,end_at,value,unit,source
+                    FROM apple_health_samples WHERE family_id=? AND external_id IN ({placeholders})''',
+                    (self.family_id, *candidate_ids)).fetchall()
+                existing = {item['external_id']: dict(item) for item in stored}
+
+            def changed(row):
+                current = existing.get(row[1])
+                return current is None or (
+                    current['child_id'], current['sample_type'], current['start_at'], current['end_at'],
+                    float(current['value']), current['unit'], current['source'],
+                ) != (row[2], row[3], row[4], row[5], float(row[6]), row[7], row[8])
+
+            changed_rows = [row for row in rows if changed(row)]
+            deleted = [external_id for external_id in deleted_ids
+                       if external_id in existing and external_id not in incoming_ids]
             db.executemany(
                 'DELETE FROM apple_health_samples WHERE family_id=? AND external_id=?',
-                ((self.family_id, external_id) for external_id in deleted_ids),
+                ((self.family_id, external_id) for external_id in deleted),
             )
             db.executemany('''INSERT INTO apple_health_samples
                     (family_id,external_id,child_id,sample_type,start_at,end_at,value,unit,source,updated_at)
@@ -50,11 +70,16 @@ class AppleHealthAdapter:
                     ON CONFLICT (family_id,external_id) DO UPDATE SET
                     child_id=excluded.child_id,sample_type=excluded.sample_type,start_at=excluded.start_at,
                     end_at=excluded.end_at,value=excluded.value,unit=excluded.unit,
-                    source=excluded.source,updated_at=excluded.updated_at''', rows)
-            if rows or deleted_ids:
+                    source=excluded.source,updated_at=excluded.updated_at''', changed_rows)
+            if changed_rows or deleted:
                 from app.automation_store import AutomationStore
-                AutomationStore(self.store).enqueue_event(self.family_id,{row[2] for row in rows},"health",changed_at,
-                    {"source":"apple-health","child_ids":sorted({row[2] for row in rows}),"changed_samples":len(rows),"deleted_ids":deleted_ids},db)
+                affected = {row[2] for row in changed_rows}
+                affected.update(existing[external_id]['child_id'] for external_id in deleted)
+                dates = {row[4][:10] for row in changed_rows}
+                dates.update(existing[external_id]['start_at'][:10] for external_id in deleted)
+                AutomationStore(self.store).enqueue_event(self.family_id,affected,"health",changed_at,
+                    {"source":"apple-health","child_ids":sorted(affected),"dates":sorted(dates),
+                     "changed_samples":len(changed_rows),"deleted_ids":deleted},db)
         return self.latest_sync()
 
     def latest_sync(self):

@@ -1,4 +1,5 @@
 """Opaque, revocable demo sessions. Only token digests are persisted."""
+import asyncio
 import hashlib
 import secrets
 from app.database import connect
@@ -114,7 +115,7 @@ async def require_session(request: Request, call_next):
     path = request.url.path
     if not path.startswith('/api/') or path in {'/api/auth/login', '/api/auth/register', '/api/webhooks/whatsapp'} or request.method == 'OPTIONS':
         return await call_next(request)
-    family = sessions.family(bearer(request))
+    family = await asyncio.to_thread(sessions.family, bearer(request))
     if not family:
         return JSONResponse({'detail': 'Sign in to continue.'}, status_code=401)
     supplied = request.query_params.get('family_id')

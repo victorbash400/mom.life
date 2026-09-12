@@ -891,17 +891,22 @@ class TaskStore(GoalLedger):
         goal = dict(row)
         goal["skill_ids"] = json.loads(goal["skill_ids"] or "[]")
         goal["plugin_ids"] = json.loads(goal["plugin_ids"] or "[]")
-        assignments = connection.execute("SELECT * FROM goal_assignments WHERE goal_id=? ORDER BY created_at", (row["id"],)).fetchall()
+        with batch(connection):
+            assignments_cursor = connection.execute("SELECT * FROM goal_assignments WHERE goal_id=? ORDER BY created_at", (row["id"],))
+            skills_cursor = connection.execute("SELECT * FROM family_skills WHERE family_id=?", (row["family_id"],))
+            questions_cursor = connection.execute("SELECT * FROM goal_questions WHERE goal_id=? ORDER BY created_at", (row["id"],))
+            activities_cursor = connection.execute("SELECT * FROM goal_activities WHERE goal_id=? ORDER BY created_at", (row["id"],))
+        assignments = assignments_cursor.fetchall()
         goal["assignments"] = [self._assignment_snapshot(item) for item in assignments]
-        skills = {skill["id"]: {**dict(skill), "required_plugin_ids": json.loads(skill["required_plugin_ids"])} for skill in connection.execute("SELECT * FROM family_skills WHERE family_id=?", (row["family_id"],))}
+        skills = {skill["id"]: {**dict(skill), "required_plugin_ids": json.loads(skill["required_plugin_ids"])} for skill in skills_cursor}
         from plugins.namespaces import namespaces
         for assignment in goal["assignments"]:
             assignment["skills"] = [skills[identity] for identity in assignment["skill_ids"] if identity in skills]
             assignment["permitted_namespaces"] = namespaces(list(dict.fromkeys(assignment["plugin_ids"] or [
                 identity for skill in assignment["skills"] for identity in skill["required_plugin_ids"]
             ])))
-        goal["questions"] = [self._question_snapshot(question) for question in connection.execute("SELECT * FROM goal_questions WHERE goal_id=? ORDER BY created_at", (row["id"],))]
-        goal["activities"] = [{**dict(item), "evidence": json.loads(item["evidence"])} for item in connection.execute("SELECT * FROM goal_activities WHERE goal_id=? ORDER BY created_at", (row["id"],))]
+        goal["questions"] = [self._question_snapshot(question) for question in questions_cursor]
+        goal["activities"] = [{**dict(item), "evidence": json.loads(item["evidence"])} for item in activities_cursor]
         return goal
 
     @staticmethod

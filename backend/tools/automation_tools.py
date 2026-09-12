@@ -28,7 +28,10 @@ def automation_tools(family_id, goal_id=None):
             raise ValueError('Read the task ledger and choose an existing task ID.')
         if goal_id and task_id != goal_id:
             raise ValueError('Create the automation on this assigned task.')
-        return await manager().create(family_id,task_id,instruction,trigger,schedule,timezone)
+        item = await manager().create(family_id,task_id,instruction,trigger,schedule,timezone)
+        if not item['enabled'] or item['scheduler_state'] == 'error':
+            raise RuntimeError(item['failure'] or 'The automation could not be enabled.')
+        return item
 
     @tool
     async def change_automation(automation_id: str, enabled: bool, instruction: str = '', schedule: str = '', timezone: str = '') -> dict:
@@ -38,7 +41,10 @@ def automation_tools(family_id, goal_id=None):
             raise ValueError('Automation not found in this task scope.')
         changes = {'enabled':enabled}
         changes.update({key:value for key,value in {'instruction':instruction,'schedule':schedule,'timezone':timezone}.items() if value})
-        return await manager().update(family_id,automation_id,**changes)
+        item = await manager().update(family_id,automation_id,**changes)
+        if enabled and (not item['enabled'] or item['scheduler_state'] == 'error'):
+            raise RuntimeError(item['failure'] or 'The automation could not be enabled.')
+        return item
 
     @tool
     async def delete_automation(automation_id: str) -> dict:
