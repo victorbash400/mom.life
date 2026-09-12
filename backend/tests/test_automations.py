@@ -253,3 +253,33 @@ def test_failed_check_is_visible_and_preserved_for_next_wake(system):
     tasks.set_goal_state(next_id,status='completed',run_state='completed',report='Check completed.')
     manager.store.finish(retry,tasks.get('family',next_id))
     assert manager.store.get('family',item['id'])['failure'] == ''
+
+
+def test_wake_executes_with_parent_providers_and_baseline(system, monkeypatch):
+    from app import goal_tasks
+    from app.goal_tasks import GoalTaskManager
+
+    tasks, parent, _, scheduler, _ = system
+    tasks.set_goal_state(parent['id'], status='completed', plugin_ids=['fitbit', 'whatsapp'])
+    baseline = tasks.create_assignment(parent['id'], {
+        'title':'Sleep baseline', 'instruction':'Read the baseline',
+        'expected_outputs':['Sleep baseline'], 'plugin_ids':['fitbit'],
+    })
+    tasks.set_assignment(baseline, status='completed', report='8.5 hours',
+                         evidence={'outputs':[{'name':'Sleep baseline','evidence':'8.5 hours measured'}]})
+    manager = AutomationManager(tasks, GoalTaskManager(tasks), scheduler)
+    item = asyncio.run(manager.create('family', parent['id'], 'Compare sleep and send a WhatsApp if below 7 hours.', 'health'))
+    seen = {}
+
+    async def worker(prompt, plugins, *args, **kwargs):
+        seen['providers'] = plugins.plugin_ids
+        instruction = json.loads(prompt)['instruction']
+        assert '8.5 hours measured' in instruction
+        return {'status':'completed','summary':'Checked baseline','evidence':'Read provider receipt',
+                'outputs':[{'name':'Automation check result','evidence':'Read provider receipt'}]}
+
+    monkeypatch.setattr(goal_tasks, 'run_worker', worker)
+    manager.store.enqueue(item['id'], item['version'], 'changed', {'child_id':'child'})
+    drain(manager)
+    assert seen['providers'] == ['fitbit', 'whatsapp']
+    assert manager.store.get('family', item['id'])['last_result'] == 'Checked baseline'

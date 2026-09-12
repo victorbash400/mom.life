@@ -110,6 +110,8 @@ class AutomationStore:
         """Create the bounded run and its pointer atomically; recovery reuses this run."""
         identity = str(uuid4())
         context = {'automation_instruction': wake['instruction'], 'task': parent['text'],
+                   'task_evidence': [{'title':a['title'],'summary':a['report'],'evidence':a['evidence']}
+                                     for a in parent['assignments'] if a['status'] == 'completed'],
                    'child_id': parent['child_id'], 'last_checked_at': wake['last_checked_at'],
                    'last_result': wake['last_result'], 'trigger': wake['trigger'],
                    'new_information': json.loads(wake['context'])}
@@ -131,9 +133,9 @@ class AutomationStore:
                 (identity,parent['family_id'],parent['child_id'],request,created_at,created_at))
             assignment_id = str(uuid4())
             db.execute('''INSERT INTO goal_assignments
-                (id,goal_id,title,instruction,status,phase,current_step,depends_on,required_inputs,expected_outputs,skill_ids,created_at)
-                VALUES (?,?,'Automation check',?,'queued','queued','Automation check','[]','[]',?,'[]',?)''',
-                (assignment_id,identity,request,json.dumps(['Automation check result']),created_at))
+                (id,goal_id,title,instruction,status,phase,current_step,depends_on,required_inputs,expected_outputs,skill_ids,plugin_ids,created_at)
+                VALUES (?,?,'Automation check',?,'queued','queued','Automation check','[]','[]',?,'[]',?,?)''',
+                (assignment_id,identity,request,json.dumps(['Automation check result']),json.dumps(parent['plugin_ids']),created_at))
             db.execute("INSERT INTO automation_run_links VALUES (?,?,?)", (identity,wake["automation_id"],wake["version"]))
             db.execute("UPDATE automation_wakes SET run_goal_id=?,state='running' WHERE id=?", (identity,wake['id']))
         return identity
