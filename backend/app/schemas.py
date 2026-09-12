@@ -54,6 +54,11 @@ class SecuritySettingsWrite(BaseModel):
     enabled: bool = True
     alert_level: Literal["urgent", "important", "all"] = "important"
     instructions: str = Field(default="", max_length=4_000)
+    sources: list[str] = Field(default_factory=list, max_length=30)
+    child_ids: list[str] = Field(default_factory=list, max_length=30)
+    depth: Literal["item", "recent"] = "item"
+    review_mode: Literal["incoming", "manual"] = "incoming"
+    channel: Literal["in_app"] = "in_app"
 
 
 class CalendarPreferencesWrite(BaseModel):

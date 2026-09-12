@@ -36,7 +36,7 @@ export function useSecurity(enabled = true) {
     }
   }, []);
 
-  const saveSettings = useCallback(async (settings: Pick<SecuritySettings, "enabled" | "alert_level" | "instructions">) => {
+  const saveSettings = useCallback(async (settings: Omit<SecuritySettings, "family_id" | "updated_at">) => {
     const response = await fetch("/api/security/settings", { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify(settings) });
     const payload = await response.json() as SecuritySettings | { error?: string };
     if (!response.ok || !("alert_level" in payload)) throw new Error("error" in payload && payload.error || "Could not save safety settings.");

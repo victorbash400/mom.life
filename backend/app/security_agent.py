@@ -22,9 +22,19 @@ class SecurityAgentManager:
         for row in rows:
             await self.start(str(row["family_id"]), str(row["id"]))
 
-    async def receive(self, family_id: str, incoming_id: str) -> tuple[dict[str, object], bool]:
+    async def receive(self, family_id: str, incoming_id: str, *, manual: bool = False) -> tuple[dict[str, object], bool]:
+        if not await asyncio.to_thread(self.store.incoming,incoming_id,family_id):
+            raise ValueError('Safety evidence not found in this family.')
         review, created = await asyncio.to_thread(self.store.receive_security_review, family_id, incoming_id)
-        if created:
+        settings = await asyncio.to_thread(self.store.security_settings,family_id)
+        item = review['incoming']
+        allowed = settings['enabled'] and item and self.store.security_scope_matches(settings,item) and (manual or settings['review_mode'] == 'incoming')
+        if manual and allowed and not created and review['status'] == 'completed' and review['action'] == 'ignore':
+            await asyncio.to_thread(self.store.set_security_review,review['id'],status='queued',action='',reason='',processed_at=None)
+            created = True
+        if created and not allowed:
+            await asyncio.to_thread(self.store.set_security_review,review['id'],status='completed',action='ignore',reason='Outside the configured automatic review scope.',processed_at=now())
+        if created and allowed:
             await self.start(family_id, str(review["id"]), known_runnable=True)
         return review, created
 
@@ -97,14 +107,16 @@ class SecurityAgentManager:
 
     async def _run(self, family_id: str, review_id: str) -> None:
         settings = await asyncio.to_thread(self.store.security_settings, family_id)
-        if not settings["enabled"]:
+        review = await asyncio.to_thread(self.store.security_review,review_id,family_id)
+        if not settings["enabled"] or not review or not review['incoming'] or not self.store.security_scope_matches(settings,review['incoming']):
+            reason = 'Safety monitoring is turned off.' if not settings['enabled'] else 'This item is outside the selected safety scope.'
             await asyncio.to_thread(
                 self.store.set_security_review, review_id, status="completed", action="ignore",
-                reason="Safety monitoring is turned off.", processed_at=now(),
+                reason=reason, processed_at=now(),
             )
             await asyncio.to_thread(
                 self.store.add_security_activity, review_id, "decision",
-                "Safety monitoring is turned off.", {"action": "ignore"},
+                reason, {"action": "ignore"},
             )
             self._publish(family_id, review_id)
             return

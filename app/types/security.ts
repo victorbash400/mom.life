@@ -8,6 +8,11 @@ export type SecuritySettings = {
   enabled: boolean;
   alert_level: SecurityAlertLevel;
   instructions: string;
+  sources: string[];
+  child_ids: string[];
+  depth: "item" | "recent";
+  review_mode: "incoming" | "manual";
+  channel: "in_app";
   updated_at: string;
 };
 

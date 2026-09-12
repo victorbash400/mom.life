@@ -21,7 +21,7 @@ Follow the parent's alert level:
 - important: alert for a credible concern that needs the parent's awareness or decision;
 - all: alert for any credible concern, including low-severity items.
 
-The parent's free-form instructions refine those defaults. Call decide_security_action exactly once. Use ignore when the item does not cross the configured threshold. Use alert only when Mom should see a concise, evidence-grounded alert. Categories are descriptive, not a fixed taxonomy. End after the decision tool confirms completion."""
+Review only the configured sources and children. For item depth use only this item and identity context; for recent depth compare the supplied recent evidence slice (at most ten items). Never claim to have inspected connected accounts or data outside this supplied slice. In-app alerts are the only delivery channel. The parent's free-form instructions refine those defaults. Call decide_security_action exactly once. Use ignore when the item does not cross the configured threshold. Use alert only when Mom should see a concise, evidence-grounded alert. Categories are descriptive, not a fixed taxonomy. End after the decision tool confirms completion."""
 
 
 async def run_security_agent(store: TaskStore, family_id: str, review_id: str, settings: Settings | None = None) -> dict[str, object]:
@@ -34,10 +34,14 @@ async def run_security_agent(store: TaskStore, family_id: str, review_id: str, s
             raise ValueError("The safety review source is unavailable.")
         from app.auth import families
         parent, children = families.snapshot(family_id)
+        policy = store.security_settings(family_id)
+        if policy['child_ids']:
+            children = [child for child in children if child['id'] in policy['child_ids']]
         return {
             "review": {key: value for key, value in review.items() if key not in {"activities", "incoming"}},
             "incoming": review["incoming"],
-            "settings": store.security_settings(family_id),
+            "settings": policy,
+            "recent_evidence": [item for item in store.security_context_slice(family_id,policy) if item['id'] != review['incoming_id']],
             "family": {
                 "parent": json.loads(json.dumps(dict(parent), default=str)),
                 "children": json.loads(json.dumps([dict(child) for child in children], default=str)),
@@ -82,6 +86,9 @@ async def run_security_agent(store: TaskStore, family_id: str, review_id: str, s
             review = store.security_review(review_id, family_id)
             if not review or review["status"] != "processing":
                 raise ValueError("This safety review is not available for a decision.")
+            policy = store.security_settings(family_id)
+            if not policy['enabled'] or not store.security_scope_matches(policy,review['incoming']):
+                raise ValueError('Safety monitoring or scope changed. This decision is no longer authorized.')
             if selected_child and selected_child != "all":
                 from app.auth import families
                 if not families.child(family_id, selected_child):

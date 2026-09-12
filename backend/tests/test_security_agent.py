@@ -25,6 +25,27 @@ class Families:
         return {"id": child_id, "family_id": family_id} if child_id == "child" else None
 
 
+def test_policy_scope_depth_and_manual_checks(tmp_path, monkeypatch):
+    store = TaskStore(tmp_path / 'policy.db')
+    saved = store.update_security_settings('family',True,'important','Review account access',
+        sources=['email'],child_ids=['child'],depth='recent',review_mode='manual',channel='in_app')
+    assert saved['sources'] == ['email'] and saved['review_mode'] == 'manual'
+    item, _ = store.receive_incoming('family','email','scoped',content='New account access',payload={'child_id':'child'})
+    store.receive_incoming('family','upload','excluded',content='Private excluded file',payload={'child_id':'child'})
+    store.receive_incoming('other','email','other-family',content='Other family',payload={'child_id':'child'})
+    assert [entry['id'] for entry in store.security_context_slice('family',saved)] == [item['id']]
+    manager = SecurityAgentManager(store)
+    start = AsyncMock(return_value=True)
+    monkeypatch.setattr(manager,'start',start)
+    review, _ = asyncio.run(manager.receive('family',item['id']))
+    start.assert_not_awaited()
+    assert store.security_review(review['id'],'family')['action'] == 'ignore'
+    _, queued = asyncio.run(manager.receive('family',item['id'],manual=True))
+    assert queued
+    start.assert_awaited_once()
+    assert store.security_review(review['id'],'family')['status'] == 'queued'
+
+
 def test_security_settings_and_alert_lifecycle(tmp_path):
     store = TaskStore(tmp_path / "security.db")
     assert store.security_settings("family")["alert_level"] == "important"

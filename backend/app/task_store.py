@@ -96,6 +96,7 @@ class TaskStore(GoalLedger):
                     alert_level TEXT NOT NULL DEFAULT 'important',
                     instructions TEXT NOT NULL DEFAULT '', updated_at TEXT NOT NULL
                 );
+                CREATE TABLE IF NOT EXISTS security_policy (family_id TEXT PRIMARY KEY, policy TEXT NOT NULL);
                 CREATE TABLE IF NOT EXISTS security_reviews (
                     id TEXT PRIMARY KEY, family_id TEXT NOT NULL, incoming_id TEXT NOT NULL,
                     status TEXT NOT NULL DEFAULT 'queued', action TEXT NOT NULL DEFAULT '',
@@ -385,13 +386,12 @@ class TaskStore(GoalLedger):
     def security_settings(self, family_id: str) -> dict[str, object]:
         with self._connect() as connection:
             row = connection.execute("SELECT * FROM security_settings WHERE family_id=?", (family_id,)).fetchone()
-            if not row:
-                return {"family_id": family_id, "enabled": True, "alert_level": "important", "instructions": "", "updated_at": ""}
-            item = dict(row)
+            policy = connection.execute("SELECT policy FROM security_policy WHERE family_id=?", (family_id,)).fetchone()
+            item = dict(row) if row else {"family_id": family_id, "enabled": True, "alert_level": "important", "instructions": "", "updated_at": ""}
             item["enabled"] = bool(item["enabled"])
-            return item
+            return {**item, "sources": [], "child_ids": [], "depth": "item", "review_mode": "incoming", "channel": "in_app", **(json.loads(policy[0]) if policy else {})}
 
-    def update_security_settings(self, family_id: str, enabled: bool, alert_level: str, instructions: str) -> dict[str, object]:
+    def update_security_settings(self, family_id: str, enabled: bool, alert_level: str, instructions: str, **policy) -> dict[str, object]:
         if alert_level not in {"urgent", "important", "all"}:
             raise ValueError("Choose a valid security alert level.")
         with self._connect() as connection:
@@ -401,7 +401,24 @@ class TaskStore(GoalLedger):
                 instructions=excluded.instructions,updated_at=excluded.updated_at""",
                 (family_id, int(enabled), alert_level, instructions.strip(), now()),
             )
+            if policy:
+                connection.execute("INSERT INTO security_policy VALUES (?,?) ON CONFLICT(family_id) DO UPDATE SET policy=excluded.policy", (family_id,json.dumps(policy)))
         return self.security_settings(family_id)
+
+    def security_scope_matches(self, settings, incoming):
+        if settings['sources'] and incoming['source'] not in settings['sources']:
+            return False
+        payload = incoming.get('payload') or {}
+        child_id = (payload.get('child_id') if isinstance(payload,dict) else None) or incoming.get('child_id')
+        return not settings['child_ids'] or child_id in settings['child_ids']
+
+    def security_context_slice(self, family_id, settings):
+        if settings['depth'] == 'item':
+            return []
+        with self._connect() as db:
+            rows = db.execute('SELECT * FROM incoming_items WHERE family_id=? ORDER BY created_at DESC LIMIT 50', (family_id,)).fetchall()
+        return [{key:dict(row)[key] for key in ('id','source','subject','content','created_at')} for row in rows
+                if self.security_scope_matches(settings,{**dict(row),'payload':json.loads(row['payload'])})][:10]
 
     def receive_security_review(self, family_id: str, incoming_id: str) -> tuple[dict[str, object], bool]:
         with self._connect() as connection:
