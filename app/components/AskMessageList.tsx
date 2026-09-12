@@ -7,5 +7,8 @@ export function AskMessageList({ messages, sending }: { messages: AskMessage[]; 
   const list = useRef<HTMLElement>(null);
   const follow = useRef(true);
   useEffect(() => { if (follow.current && list.current) list.current.scrollTop = list.current.scrollHeight; }, [messages]);
-  return <section ref={list} onScroll={() => { const node = list.current; if (node) follow.current = node.scrollHeight - node.scrollTop - node.clientHeight < 80; }} className={styles.list} aria-live="polite"><div>{messages.map((message) => <AskMessageBubble key={message.id} message={message} pending={sending && message === messages.at(-1) && !message.content} />)}</div></section>;
+  return <section ref={list} onScroll={() => { const node = list.current; if (node) follow.current = node.scrollHeight - node.scrollTop - node.clientHeight < 80; }} className={styles.list} aria-live="polite"><div>{messages.map((message) => {
+    const streaming = sending && message === messages.at(-1) && message.kind !== "tool" && message.role === "assistant";
+    return <AskMessageBubble key={message.id} message={message} streaming={streaming} />;
+  })}</div></section>;
 }

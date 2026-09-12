@@ -1,7 +1,6 @@
 "use client";
 import { AskChatHeader } from "./AskChatHeader";
 import { useState } from "react";
-import { useFamily } from "./FamilyProvider";
 import { useChats } from "../hooks/useChats";
 import { AskComposer } from "./AskComposer";
 import { AskMessageList } from "./AskMessageList";
@@ -10,8 +9,7 @@ import { WorkspaceHeader } from "./WorkspaceHeader";
 import styles from "./AskWorkspace.module.css";
 
 export function AskWorkspace({ onClose }: { onClose: () => void }) {
-  const { family } = useFamily();
-  const chat = useChats(family.id);
+  const chat = useChats();
   const [historyOpen, setHistoryOpen] = useState(false);
   return <div className={styles.workspace}>
     <WorkspaceHeader title="Ask" onClose={onClose} />

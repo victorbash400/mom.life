@@ -1,5 +1,6 @@
 "use client";
 import { useCallback, useEffect, useRef, useState } from "react";
+import { applyChatEvent } from "../lib/chatMessages";
 import { streamChat } from "../lib/chatStream";
 import type { Chat, ChatSummary } from "../types/chat";
 
@@ -9,19 +10,19 @@ async function request<T>(path = "", method = "GET"): Promise<T> {
   return response.status === 204 ? undefined as T : response.json();
 }
 
-export function useChats(familyId: string) {
+export function useChats() {
   const [chats, setChats] = useState<ChatSummary[]>([]);
   const [active, setActive] = useState<Chat | null>(null);
-  const [busy, setBusy] = useState(true);
+  const [busy, setBusy] = useState(false);
   const [sending, setSending] = useState(false);
   const [error, setError] = useState("");
   const locked = useRef(false);
   const refresh = useCallback(async () => setChats(await request<ChatSummary[]>()), []);
   useEffect(() => {
     let live = true;
-    request<ChatSummary[]>().then((items) => { if (live) setChats(items); }).catch((cause) => { if (live) setError(cause.message); }).finally(() => { if (live) setBusy(false); });
+    request<ChatSummary[]>().then((items) => { if (live) setChats(items); }).catch((cause) => { if (live) setError(cause.message); });
     return () => { live = false; };
-  }, [familyId]);
+  }, []);
 
   async function perform(action: () => Promise<void>) {
     if (locked.current) return;
@@ -34,16 +35,19 @@ export function useChats(familyId: string) {
   function remove(id: string) { return perform(async () => { await request(`/${id}`, "DELETE"); setChats((items) => items.filter((item) => item.id !== id)); if (active?.id === id) setActive(null); }); }
   function send(message: string) {
     return perform(async () => {
-      const chat = active ?? await request<Chat>("", "POST");
+      const chat = active ?? { id: crypto.randomUUID(), title: message.replace(/\s+/g, " ").slice(0, 70), updated_at: Date.now(), messages: [] };
       const assistantId = crypto.randomUUID();
       setActive({ ...chat, title: chat.messages.length ? chat.title : message.replace(/\s+/g, " ").slice(0, 70), messages: [...chat.messages, { id: crypto.randomUUID(), role: "user", content: message }, { id: assistantId, role: "assistant", content: "" }] });
       setSending(true);
       try {
-        await streamChat(familyId, chat.id, message, (content) => setActive((current) => current ? { ...current, messages: current.messages.map((item) => item.id === assistantId ? { ...item, content: item.content + content } : item) } : current));
+        await streamChat(chat.id, message, (event) => setActive((current) => current ? { ...current, messages: applyChatEvent(current.messages.filter((item) => item.kind === "tool" || item.id !== assistantId || item.content), event) } : current));
+      } catch (cause) {
+        setActive((current) => current ? { ...current, messages: applyChatEvent(current.messages, { type: "error", error: String(cause) }) } : current);
+        throw cause;
       } finally {
         setSending(false);
-        setActive((current) => current ? { ...current, messages: current.messages.filter((item) => item.id !== assistantId || item.content) } : current);
-        await refresh();
+        setActive((current) => current ? { ...current, messages: current.messages.filter((item) => item.kind === "tool" || item.id !== assistantId || item.content) } : current);
+        void refresh().catch((cause) => setError(cause instanceof Error ? cause.message : "Could not refresh chat history."));
       }
     });
   }

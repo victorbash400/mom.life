@@ -1,6 +1,7 @@
 .message { color: #4a403c; font-size: 13px; line-height: 1.62; }
 .message[data-role="user"] { max-width: 78%; margin-left: auto; padding: 10px 14px; border-radius: 16px 16px 5px 16px; color: #fff; background: #b8756f; }
 .message p { margin: 0; }
+.message[data-role="assistant"] > p { white-space: pre-wrap; }
 .message[data-role="assistant"] { padding: 2px 4px; }
 .message[data-role="assistant"] > :first-child { margin-top: 0; }
 .message[data-role="assistant"] > :last-child { margin-bottom: 0; }

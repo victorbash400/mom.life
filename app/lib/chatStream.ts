@@ -1,5 +1,7 @@
-export async function streamChat(familyId: string, chatId: string, message: string, onContent: (content: string) => void) {
-  const response = await fetch("/api/chat/stream", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ family_id: familyId, chat_id: chatId, message }) });
+import type { ChatStreamEvent } from "../types/chat";
+
+export async function streamChat(chatId: string, message: string, onEvent: (event: ChatStreamEvent) => void) {
+  const response = await fetch("/api/chat/stream", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ chat_id: chatId, message }) });
   if (!response.ok || !response.body) throw new Error("mom.life could not respond. Please try again.");
   const reader = response.body.getReader();
   const decoder = new TextDecoder();
@@ -7,10 +9,10 @@ export async function streamChat(familyId: string, chatId: string, message: stri
   function apply(raw: string) {
     const data = raw.split("\n").find((line) => line.startsWith("data:"))?.slice(5).trim();
     if (!data) return;
-    const event = JSON.parse(data);
+    const event = JSON.parse(data) as ChatStreamEvent;
     if (event.type === "error") throw new Error(event.error ?? "mom.life could not respond.");
     if (event.type === "done") completed = true;
-    if (event.type === "content" && event.content) onContent(event.content);
+    onEvent(event);
   }
   try {
     while (true) {
