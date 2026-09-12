@@ -47,7 +47,7 @@ def test_simulated_whatsapp_reaches_the_real_intake_store(tmp_path, monkeypatch,
 
     monkeypatch.setattr(main, "task_store", store)
     monkeypatch.setattr(main, "intake_agent", SimpleNamespace(start=AsyncMock()))
-    monkeypatch.setattr(main, "security_agent", SimpleNamespace(start=AsyncMock()))
+    monkeypatch.setattr(main, "security_agent", SimpleNamespace(receive=AsyncMock()))
     monkeypatch.setattr(main, "education_agent", SimpleNamespace(start=AsyncMock()))
     monkeypatch.setattr(main, "goal_tasks", SimpleNamespace(start=lambda *_: None))
     monkeypatch.setattr(auth, "families", families)
@@ -65,6 +65,7 @@ def test_simulated_whatsapp_reaches_the_real_intake_store(tmp_path, monkeypatch,
     assert item["source"] == "whatsapp"
     assert item["content"] == "My school trip form is due Friday."
     assert item["payload"]["simulated"] is True
+    assert item["payload"]["child_id"] == 'child'
 
 
 def test_simulator_disconnect_does_not_remove_the_installed_plugin(tmp_path):
@@ -116,7 +117,11 @@ def test_simulated_providers_are_connected_and_callable_by_assignments(tmp_path,
 
     whatsapp = PluginToolSession(["whatsapp"], store, "family")
     asyncio.run(whatsapp.load("whatsapp"))
+    from app.event_stream import family_events
+    updates = family_events.subscribe('family')
     asyncio.run(whatsapp.call("whatsapp", "send_text", {"to": "child", "text": "Your form is ready."}, "message"))
+    assert updates.get_nowait()['type'] == 'simulator_changed'
+    family_events.unsubscribe('family', updates)
     assert store.simulator_messages("family")[-1]["direction"] == "outgoing"
 
     instacart = PluginToolSession(["instacart"], store, "family")

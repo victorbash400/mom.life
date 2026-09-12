@@ -32,9 +32,10 @@ class SecurityAgentManager:
         if manual and allowed and not created and review['status'] == 'completed' and review['action'] == 'ignore':
             await asyncio.to_thread(self.store.set_security_review,review['id'],status='queued',action='',reason='',processed_at=None)
             created = True
-        if created and not allowed:
+        runnable = created or review['status'] == 'queued'
+        if runnable and not allowed:
             await asyncio.to_thread(self.store.set_security_review,review['id'],status='completed',action='ignore',reason='Outside the configured automatic review scope.',processed_at=now())
-        if created and allowed:
+        if runnable and allowed:
             await self.start(family_id, str(review["id"]), known_runnable=True)
         return review, created
 

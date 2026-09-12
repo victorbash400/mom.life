@@ -12,15 +12,25 @@ export function useFamilyTasks() {
   const [error, setError] = useState<string>();
   useEffect(() => {
     let active = true;
+    let refreshing = false;
+    let pending = false;
     async function refresh() {
-      const revision = ++revisionRef.current;
+      pending = true;
+      if (refreshing) return;
+      refreshing = true;
       try {
-        const response = await fetch("/api/tasks", { cache: "no-store" });
-        const payload = await response.json();
-        if (!response.ok || !Array.isArray(payload)) throw new Error(payload.error || "Could not load tasks.");
-        if (active && revision === revisionRef.current) { setTasks(payload); setError(undefined); }
-      } catch (cause) { if (active) setError(cause instanceof Error ? cause.message : "Could not load tasks."); }
-      finally { if (active) setLoaded(true); }
+        do {
+          pending = false;
+          const revision = revisionRef.current;
+          try {
+            const response = await fetch("/api/tasks", { cache: "no-store" });
+            const payload = await response.json();
+            if (!response.ok || !Array.isArray(payload)) throw new Error(payload.error || "Could not load tasks.");
+            if (active && revision === revisionRef.current) { setTasks(payload); setError(undefined); }
+          } catch (cause) { if (active) setError(cause instanceof Error ? cause.message : "Could not load tasks."); }
+          finally { if (active) setLoaded(true); }
+        } while (active && pending);
+      } finally { refreshing = false; }
     }
     const unsubscribe = subscribeFamilyEvents({
       onEvent: (event) => { if (event.type === "goals_changed") void refresh(); },

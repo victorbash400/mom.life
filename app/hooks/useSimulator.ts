@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
+import { subscribeFamilyEvents } from "../lib/familyEvents";
 import type { SimulatorMessage, SimulatorState } from "../types/simulator";
 
 
@@ -18,7 +19,11 @@ export function useSimulator(afterMutation?: () => Promise<void>, enabled = true
   useEffect(() => {
     if (!enabled) return;
     const frame = requestAnimationFrame(() => void refresh().catch((reason) => setError(message(reason))));
-    return () => cancelAnimationFrame(frame);
+    const unsubscribe = subscribeFamilyEvents({
+      onEvent: (event) => { if (event.type === "simulator_changed") void refresh().catch((reason) => setError(message(reason))); },
+      onConnection: (connected) => { if (connected) void refresh().catch((reason) => setError(message(reason))); },
+    });
+    return () => { cancelAnimationFrame(frame); unsubscribe(); };
   }, [enabled, refresh]);
   async function run(path: string, method: "PUT" | "DELETE", refreshConnections = false, body?: object) {
     setBusy(true); setError(undefined);

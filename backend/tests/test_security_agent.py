@@ -122,3 +122,18 @@ def test_disabled_security_monitoring_stays_quiet(tmp_path):
     saved = store.security_review(str(review["id"]), "family")
     assert saved["action"] == "ignore"
     assert saved["reason"] == "Safety monitoring is turned off."
+
+
+def test_prequeued_simulator_review_respects_manual_mode(tmp_path, monkeypatch):
+    store = TaskStore(tmp_path / 'manual-simulator.db')
+    store.set_simulator_plugin('family', 'whatsapp', True)
+    store.update_security_settings('family', True, 'important', '', review_mode='manual', child_ids=['child'])
+    routed = store.receive_simulator_incoming('family', 'child', 'Noah', 'Please review this message', 'sim-manual', {'child_id':'child'})
+    manager = SecurityAgentManager(store)
+    start = AsyncMock()
+    monkeypatch.setattr(manager, 'start', start)
+    asyncio.run(manager.receive('family', routed['incoming_id']))
+    start.assert_not_called()
+    assert store.security_review(routed['security_id'], 'family')['action'] == 'ignore'
+    asyncio.run(manager.receive('family', routed['incoming_id'], manual=True))
+    start.assert_called_once_with('family', routed['security_id'], known_runnable=True)

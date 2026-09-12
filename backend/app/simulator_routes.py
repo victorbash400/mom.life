@@ -62,7 +62,8 @@ async def send_message(body: SimulatedMessage, request: Request, background_task
     if not profile:
         raise HTTPException(404, "Simulated family profile not found.")
     event_id = f"sim-wa-{uuid4()}"
-    payload = {"id": event_id, "from": f"sim:{body.profile_id}", "text": {"body": body.text.strip()}, "simulated": True, "profile_id": body.profile_id}
+    payload = {"id": event_id, "from": f"sim:{body.profile_id}", "text": {"body": body.text.strip()}, "simulated": True, "profile_id": body.profile_id,
+               "child_id": body.profile_id if body.profile_id != "parent" else ""}
     try:
         routed = await asyncio.to_thread(task_store.receive_simulator_incoming, family_id, body.profile_id,
             f"{profile['name']} (Simulator)", body.text.strip(), event_id, payload)
@@ -73,9 +74,10 @@ async def send_message(body: SimulatedMessage, request: Request, background_task
 
 
 async def _route_message(family_id, routed, intake_agent, security_agent, education_agent, goal_tasks, family_events):
+    family_events.publish(family_id, {"type": "simulator_changed"})
     if routed["created"]:
         await intake_agent.start(family_id, str(routed["incoming_id"]), known_runnable=True)
-        await security_agent.start(family_id, str(routed["security_id"]), known_runnable=True)
+        await security_agent.receive(family_id, str(routed["incoming_id"]))
         await education_agent.start(family_id, str(routed["education_id"]), known_runnable=True)
     for goal_id in routed["goal_ids"]:
         await goal_tasks.start(family_id, goal_id)

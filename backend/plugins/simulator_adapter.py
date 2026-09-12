@@ -56,6 +56,8 @@ class SimulatorAdapter:
             if recipient != "parent" and not families.child(self.family_id, recipient):
                 raise ValueError("Choose a simulated family profile.")
             message = self.store.add_simulator_message(self.family_id, recipient, "outgoing", arguments["text"].strip(), "agent")
+            from app.event_stream import family_events
+            family_events.publish(self.family_id, {'type':'simulator_changed'})
             return {"status": "success", "data": message}
         if self.plugin_id in {"fitbit", "withings"}:
             return self._health(name, arguments)
