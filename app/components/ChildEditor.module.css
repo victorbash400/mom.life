@@ -1,11 +1,17 @@
-.editor { display: grid; gap: 14px; padding: 18px; color: #654e47; }
-.editor label { display: grid; gap: 6px; font-size: 12px; }
-.editor input { min-width: 0; padding: 9px 12px; border: 1px solid #cbb6af; border-radius: 12px; background: #fff9f2; color: #654e47; }
-.editor .check { display: flex; align-items: center; gap: 8px; }
+.editor { display: grid; padding: 20px; gap: 16px; color: #654e47; }
+.editor header { display: flex; min-height: 70px; align-items: center; justify-content: space-between; gap: 18px; }
+.editor header i,.editor header > svg { width: 70px; height: 70px; border-radius: 50%; background-position: center; background-repeat: no-repeat; background-size: cover; }
+.editor header > svg { padding: 16px; background: #f3e9e4; stroke-width: 1.4; }
+.editor label { display: grid; gap: 7px; font-size: 12px; font-weight: 560; }
+.editor input { min-width: 0; height: 42px; padding: 0 13px; border: 1px solid #cfbbb4; border-radius: 13px; color: #51423e; background: #fffaf6; font: inherit; outline: none; }
+.editor input:focus { border-color: #ad6a62; box-shadow: 0 0 0 3px rgb(173 106 98 / 10%); }
+.editor header label { position: relative; min-height: 36px; padding: 0 15px; display: inline-flex; align-items: center; border: 1px solid #c9afa7; border-radius: 18px; background: #f5e9e4; cursor: pointer; }
+.editor header label:hover { background: #ecddd7; }
+.editor header input { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); }
 .editor footer { display: flex; justify-content: flex-end; gap: 8px; }
-.editor button { padding: 9px 18px; border: 1px solid #9f5d54; border-radius: 18px; background: #ac665d; color: white; cursor: pointer; }
-.editor p { font-size: 12px; color: #9e4f49; }
-
-.photo,.editor .check { display: flex; justify-content: space-between; align-items: center; font-size: 12px; }
-.editor .upload { position: relative; display: block; max-width: 65%; overflow: hidden; padding: 9px 18px; border-radius: 18px; background: #ac665d; color: white; text-overflow: ellipsis; white-space: nowrap; cursor: pointer; }
-.upload input { position: absolute; inset: 0; width: 100%; opacity: 0; cursor: pointer; }
+.editor button { min-width: 82px; height: 38px; border: 1px solid #c9afa7; border-radius: 19px; color: #654e47; background: #f5e9e4; font-size: 12px; font-weight: 560; cursor: pointer; }
+.editor button[type="submit"] { border-color: #9f5d54; color: #fff; background: #ac665d; }
+.editor button:hover { background: #ecddd7; }
+.editor button[type="submit"]:hover { background: #98584f; }
+.editor button:disabled { cursor: default; opacity: .6; }
+.editor p { margin: 0; color: #9e4f49; font-size: 11px; }
