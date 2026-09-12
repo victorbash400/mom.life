@@ -63,6 +63,8 @@ def test_tasks_are_persisted_and_mutable(tmp_path, monkeypatch) -> None:
     from unittest.mock import AsyncMock
     monkeypatch.setattr(main, "task_store", TaskStore(tmp_path / "tasks.sqlite3"))
     monkeypatch.setattr(main, "goal_tasks", AsyncMock())
+    from app.automation_manager import AutomationManager
+    monkeypatch.setattr(main, "automations", AutomationManager(main.task_store,main.goal_tasks))
     created = client.post("/api/tasks", json={"child_id": "all", "text": "Book appointment"})
     assert created.status_code == 201
     task = created.json()

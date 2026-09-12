@@ -10,14 +10,17 @@ def supervisor_tools(family_id):
         return task_store.list(family_id)
 
     @tool
-    async def create_family_goal(child_id: str, request: str) -> dict:
-        """Create a durable goal when Mom asks for work. Preserve the requested outcome."""
+    async def create_family_goal(child_id: str, request: str, start_now: bool = True) -> dict:
+        """Create a durable goal when Mom asks for work. For ongoing monitoring or future-only work use start_now=False, then create_automation on its id. Preserve the requested outcome."""
         from app.auth import families
         if child_id != 'all' and not families.child(family_id,child_id):
             raise ValueError('Select an existing child or all children.')
         goal = task_store.create(family_id,child_id,request)
-        await goal_tasks.start(family_id,goal['id'])
-        return goal
+        if start_now:
+            await goal_tasks.start(family_id,goal['id'])
+        else:
+            task_store.set_goal_state(goal["id"],run_state="waiting",current_step="Waiting for an automation trigger")
+        return task_store.get(family_id,goal["id"])
 
     @tool
     async def revise_goal_plan(goal_id: str, instruction: str) -> dict:
@@ -32,4 +35,5 @@ def supervisor_tools(family_id):
         parent, children = families.snapshot(family_id)
         return {"parent": dict(parent), "children": [dict(child) for child in children]}
 
-    return [list_goal_tasks,create_family_goal,revise_goal_plan,get_family_context]
+    from tools.automation_tools import automation_tools
+    return [list_goal_tasks,create_family_goal,revise_goal_plan,get_family_context,*automation_tools(family_id)]

@@ -124,7 +124,9 @@ class GoalLedger:
                 continue
             try:
                 with self._connect() as db:
-                    db.execute("UPDATE family_tasks SET status='paused',run_state='paused' WHERE id=?", (identity,))
+                    automated = db.execute("SELECT 1 FROM automations WHERE goal_id=? AND enabled=1 LIMIT 1", (identity,)).fetchone()
+                    db.execute("UPDATE family_tasks SET status=?,run_state=? WHERE id=?",
+                               ('active' if automated else 'paused','queued' if automated else 'paused',identity))
                     db.execute("UPDATE goal_assignments SET status='queued',phase='queued' WHERE status='running' AND goal_id=?", (identity,))
             finally:
                 release(lease)

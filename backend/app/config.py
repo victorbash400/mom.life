@@ -19,6 +19,10 @@ class Settings(BaseSettings):
     model_max_tokens: int = 2048
     bedrock_project_id: str = "proj_t6e6u24fw7kbzz5otsfo"
     aws_profile: str = Field(default="", validation_alias=AliasChoices("MOM_LIFE_AWS_PROFILE", "AWS_PROFILE"))
+    automation_target_arn: str = ''
+    automation_role_arn: str = ''
+    automation_dlq_arn: str = ''
+    automation_schedule_group: str = 'mom-life'
     cors_origins: str = "http://localhost:3000"
 
     model_config = SettingsConfigDict(

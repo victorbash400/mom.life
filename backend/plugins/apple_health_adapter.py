@@ -51,6 +51,10 @@ class AppleHealthAdapter:
                     child_id=excluded.child_id,sample_type=excluded.sample_type,start_at=excluded.start_at,
                     end_at=excluded.end_at,value=excluded.value,unit=excluded.unit,
                     source=excluded.source,updated_at=excluded.updated_at''', rows)
+            if rows or deleted_ids:
+                from app.automation_store import AutomationStore
+                AutomationStore(self.store).enqueue_event(self.family_id,{row[2] for row in rows},"health",changed_at,
+                    {"source":"apple-health","child_ids":sorted({row[2] for row in rows}),"changed_samples":len(rows),"deleted_ids":deleted_ids},db)
         return self.latest_sync()
 
     def latest_sync(self):

@@ -75,6 +75,8 @@ async def run_worker(prompt, plugins, on_progress: Callable, expected_outputs, s
         """Call an exact loaded plugin tool within the user's assigned outcome."""
         if finalizing:
             raise ValueError('Do not repeat provider actions while finalizing; use the recorded evidence from this run.')
+        from app.automation_store import AutomationStore
+        AutomationStore(store).require_active_run(goal_id)
         directory = plugins.loaded.get(plugin_id, [])
         definition = next((item for item in directory if item['name'] == name), None)
         if not definition:
@@ -92,6 +94,14 @@ async def run_worker(prompt, plugins, on_progress: Callable, expected_outputs, s
         store.add_activity(goal_id,'tool_result',name,{'assignment_id':assignment_id,'call_id':call_id,'result':response})
         family_events.publish(plugins.family_id, {'type': 'goals_changed', 'goal_id': goal_id})
         return response
+
+    @tool
+    def notify_mom(message: str) -> dict:
+        """Deliver one concise in-app notification for this automation check when its requested condition is met."""
+        from app.automation_store import AutomationStore
+        receipt = AutomationStore(store).notify(goal_id,message)
+        family_events.publish(plugins.family_id,{'type':'automations_changed'})
+        return receipt
 
     @tool
     def complete_assignment(summary: str, evidence: str, outputs: list[dict[str,str]]) -> dict:
@@ -115,10 +125,11 @@ async def run_worker(prompt, plugins, on_progress: Callable, expected_outputs, s
         agent_ref['agent'].cancel()
         return {'status':'completed','instruction':'End this run now.'}
 
+    from tools.automation_tools import automation_tools
     config = settings or get_settings()
     session = boto3.Session(profile_name=config.aws_profile or None,region_name=config.strands_region)
     agent = Agent(name='mom_life_goal_worker', model=BedrockModel(boto_session=session,model_id=config.strands_model_id,temperature=0.2,max_tokens=config.model_max_tokens,service_tier=config.model_service_tier),
-                  system_prompt=WORKER_PROMPT, tools=[get_current_datetime,read_family_context,update_progress,ask_mom,wait_for_provider_event,load_goal_tools,call_plugin,complete_assignment],
+                  system_prompt=WORKER_PROMPT, tools=[get_current_datetime,read_family_context,update_progress,ask_mom,wait_for_provider_event,load_goal_tools,call_plugin,notify_mom,complete_assignment,*automation_tools(plugins.family_id,goal_id)],
                   tool_executor=SequentialToolExecutor(),callback_handler=None)
     agent_ref['agent'] = agent
     await invoke(agent, prompt, config.model_timeout_seconds)

@@ -21,6 +21,7 @@ from plugins.catalog import PLUGINS, plugin_by_id, plugin_snapshot
 async def lifespan(app):
     async def recover():
         await asyncio.to_thread(task_store.recover)
+        automations.start_listener()
         await asyncio.gather(
             security_agent.recover(),
             education_agent.recover(),
@@ -33,6 +34,7 @@ async def lifespan(app):
     finally:
         recovery.cancel()
         await asyncio.gather(recovery, return_exceptions=True)
+        await automations.shutdown()
         await intake_agent.shutdown()
         await security_agent.shutdown()
         await education_agent.shutdown()
@@ -65,9 +67,13 @@ from app.simulator_routes import router as simulator_router
 app.include_router(simulator_router)
 from app.oauth_routes import router as oauth_router
 app.include_router(oauth_router)
+from app.automation_routes import router as automation_router
+app.include_router(automation_router)
 settings = get_settings()
 task_store = TaskStore(settings.database_url)
 goal_tasks = GoalTaskManager(task_store)
+from app.automation_manager import AutomationManager
+automations = AutomationManager(task_store,goal_tasks)
 from app.security_agent import SecurityAgentManager
 security_agent = SecurityAgentManager(task_store)
 from app.education_agent import EducationAgentManager
@@ -144,11 +150,15 @@ async def update_task(task_id: str, body: TaskUpdate, request: Request) -> dict[
         raise HTTPException(409,"Assignments must complete with evidence before the goal can finish.")
     if body.status == "paused":
         await goal_tasks.stop(task_id)
+        for item in automations.store.list(family_id):
+            if item["goal_id"] == task_id:
+                await automations._stop_runs(item["id"])
     task = task_store.update(task_id, body.status)
     if not task:
         raise HTTPException(status_code=404, detail="Task not found")
     if body.status == "active":
         await goal_tasks.start(str(task["family_id"]), task_id)
+        automations.kick(family_id,task_id)
     family_events.publish(str(task["family_id"]), {"type": "goals_changed", "goal_id": task_id})
     return task
 
@@ -159,6 +169,9 @@ async def delete_task(task_id: str, request: Request) -> None:
     if not task_store.get(family_id,task_id):
         raise HTTPException(404,"Task not found")
     await goal_tasks.stop(task_id)
+    for item in automations.store.list(family_id):
+        if item["goal_id"] == task_id:
+            await automations.delete(family_id,item["id"])
     from app.browser_cleanup import discard_goal_browser_sessions
     await discard_goal_browser_sessions(task_store,task_id)
     if not task_store.delete(task_id):

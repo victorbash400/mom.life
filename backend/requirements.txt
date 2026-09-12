@@ -2,6 +2,7 @@ fastapi
 uvicorn[standard]
 strands-agents
 boto3
+botocore[crt]
 pydantic-settings
 httpx
 pytest

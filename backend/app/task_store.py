@@ -188,6 +188,8 @@ class TaskStore(GoalLedger):
                 );
             """)
             self._migrate_tasks(connection)
+        from app.automation_store import AutomationStore
+        AutomationStore(self).initialize()
 
     def calendar_preferences(self, family_id: str) -> dict[str, object]:
         with self._connect() as connection:
@@ -228,7 +230,7 @@ class TaskStore(GoalLedger):
     def list(self, family_id: str) -> list[dict[str, object]]:
         with self._connect() as connection:
             with batch(connection):
-                rows_cursor = connection.execute("SELECT * FROM family_tasks WHERE family_id=? ORDER BY created_at DESC", (family_id,))
+                rows_cursor = connection.execute("SELECT * FROM family_tasks WHERE family_id=? AND id NOT IN (SELECT run_goal_id FROM automation_run_links) ORDER BY created_at DESC", (family_id,))
                 assignments_cursor = connection.execute("""SELECT assignment.* FROM goal_assignments assignment
                 JOIN family_tasks goal ON goal.id=assignment.goal_id
                 WHERE goal.family_id=? ORDER BY assignment.created_at""", (family_id,))
@@ -318,6 +320,10 @@ class TaskStore(GoalLedger):
                 "INSERT INTO intake_activities VALUES (?,?,?,?,?,?)",
                 (str(uuid4()), identity, "received", f"Received information from {source}.", "{}", now()),
             )
+            from app.automation_store import AutomationStore
+            child_id = str(payload.get('child_id') or '') if isinstance(payload,dict) else ''
+            AutomationStore(self).enqueue_event(family_id,{child_id},'incoming',identity,
+                {'incoming_id':identity,'source':source,'content':content},connection)
             row = connection.execute("SELECT * FROM incoming_items WHERE id=?", (identity,)).fetchone()
             return self._incoming_snapshot(connection, row), True
 
@@ -771,6 +777,8 @@ class TaskStore(GoalLedger):
             correlation = f"sim:{profile_id}"
             connection.execute("INSERT INTO provider_events VALUES (?,?,?,?,?,?)",
                 (event_id, family_id, "whatsapp", correlation, json.dumps(payload, default=str), timestamp))
+            from app.automation_store import AutomationStore
+            AutomationStore(self).enqueue_event(family_id,{profile_id},'incoming',event_id,payload,connection)
             waits = connection.execute(
                 """SELECT wait.*,goal.status AS goal_status FROM provider_waits wait
                 JOIN family_tasks goal ON goal.id=wait.goal_id

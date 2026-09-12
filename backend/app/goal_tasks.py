@@ -21,8 +21,19 @@ class GoalTaskManager:
         self._workers: dict[str, asyncio.Task[bool]] = {}
         self._revisions: dict[str, asyncio.Lock] = {}
         self._capacity = asyncio.Semaphore(4)
+        self._automation_manager = None
 
-    async def start(self, family_id: str, goal_id: str, *, known_active: bool = False) -> bool:
+    async def start(self, family_id: str, goal_id: str, *, known_active: bool = False, automation_check: bool = False) -> bool:
+        if self._automation_manager is not None and not automation_check:
+            with self.store._connect() as db:
+                link = db.execute("""SELECT a.goal_id FROM automation_run_links r
+                    LEFT JOIN automations a ON a.id=r.automation_id WHERE r.run_goal_id=?""", (goal_id,)).fetchone()
+            if link:
+                self._automation_manager.store.require_active_run(goal_id)
+                if not self.store.get(family_id,goal_id):
+                    raise ValueError('Goal not found.')
+                self._automation_manager.kick(family_id,link['goal_id'])
+                return True
         existing = self._workers.get(goal_id)
         if (existing and not existing.done()) or goal_id in _ACTIVE_GOALS:
             return False
@@ -52,12 +63,21 @@ class GoalTaskManager:
                 return True
             finally:
                 release(lease)
+                from app.database import Connection
+                with self.store._connect() as db:
+                    if isinstance(db, Connection):
+                        db.execute("SELECT pg_notify('mom_life_automations',?)", (goal_id,))
 
     async def stop(self, goal_id: str) -> None:
         worker = self._workers.get(goal_id)
         if worker and not worker.done():
             worker.cancel()
             await asyncio.gather(worker, return_exceptions=True)
+
+    async def wait(self, goal_id: str) -> None:
+        worker = self._workers.get(goal_id)
+        if worker and worker is not asyncio.current_task():
+            await asyncio.shield(worker)
 
     async def revise(self, family_id: str, goal_id: str, instruction: str) -> None:
         async with self._revisions.setdefault(goal_id, asyncio.Lock()):

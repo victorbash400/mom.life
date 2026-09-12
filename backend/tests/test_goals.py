@@ -148,7 +148,7 @@ def test_worker_terminal_and_completion_requirements(board,monkeypatch):
             methods['ask_mom']('Which school?')
     monkeypatch.setattr(goal_worker,'Agent',FakeAgent)
     monkeypatch.setattr(goal_worker,'BedrockModel',lambda **kwargs:None)
-    result = asyncio.run(goal_worker.run_worker('{}',SimpleNamespace(),lambda *args:None,['Supplies list'],store,goal,identity))
+    result = asyncio.run(goal_worker.run_worker('{}',SimpleNamespace(family_id="family"),lambda *args:None,['Supplies list'],store,goal,identity))
     assert result['status']=='blocked'
     assert captured['cancelled'] is True
     assert store.questions(goal)[0]['question']=='Which school?'
@@ -173,7 +173,7 @@ def test_worker_gets_one_evidence_only_finalization_turn(board,monkeypatch):
                 self.tools['complete_assignment']('Done','Observed evidence',[{'name':'Supplies list','evidence':'Water, lunch'}])
     monkeypatch.setattr(goal_worker,'Agent',FakeAgent)
     monkeypatch.setattr(goal_worker,'BedrockModel',lambda **kwargs:None)
-    result = asyncio.run(goal_worker.run_worker('{}',SimpleNamespace(),lambda *args:None,['Supplies list'],store,goal,identity))
+    result = asyncio.run(goal_worker.run_worker('{}',SimpleNamespace(family_id="family"),lambda *args:None,['Supplies list'],store,goal,identity))
     assert result['status'] == 'completed'
     assert len(calls) == 2
     assert 'Do not call any provider again' in calls[1]
