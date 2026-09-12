@@ -283,3 +283,15 @@ def test_wake_executes_with_parent_providers_and_baseline(system, monkeypatch):
     drain(manager)
     assert seen['providers'] == ['fitbit', 'whatsapp']
     assert manager.store.get('family', item['id'])['last_result'] == 'Checked baseline'
+
+
+def test_worker_automation_tool_links_current_task_without_internal_id(system, monkeypatch):
+    from tools.automation_tools import automation_tools
+
+    tasks, parent, _, _, manager = system
+    monkeypatch.setattr(main, 'automations', manager)
+    create_tool = next(tool for tool in automation_tools('family', parent['id']) if tool.tool_name == 'create_automation')
+    receipt = asyncio.run(create_tool(instruction='Check changed sleep data.', trigger='health'))
+    assert receipt['goal_id'] == parent['id'] and receipt['enabled']
+    with pytest.raises(ValueError, match='assigned task'):
+        asyncio.run(create_tool(instruction='Check', trigger='health', task_id='another-task'))

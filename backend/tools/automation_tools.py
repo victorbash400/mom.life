@@ -14,13 +14,18 @@ def automation_tools(family_id, goal_id=None):
         return [item for item in items if not goal_id or item['goal_id'] == goal_id]
 
     @tool
-    async def create_automation(task_id: str, instruction: str, trigger: Literal['time','health','incoming'], schedule: str = '', timezone: str = 'UTC') -> dict:
+    async def create_automation(instruction: str, trigger: Literal['time','health','incoming'], schedule: str = '', timezone: str = 'UTC', task_id: str = '') -> dict:
         """Save a standing instruction linked to a task. Describe what to check and when to notify or act.
         health wakes on changed child HealthKit data; incoming wakes on newly received family information.
         time uses AWS at(YYYY-MM-DDTHH:MM:SS), rate(1 minute), rate(1 day), or cron expressions.
         One-time times are local to the supplied IANA timezone. Timed delivery has minute precision.
         Check enabled and failure in the receipt; never promise monitoring when setup failed.
+        In an assigned worker, omit task_id to link to the current task automatically.
+        In chat, supply an existing task ID from the task ledger.
         """
+        task_id = task_id or goal_id
+        if not task_id:
+            raise ValueError('Read the task ledger and choose an existing task ID.')
         if goal_id and task_id != goal_id:
             raise ValueError('Create the automation on this assigned task.')
         return await manager().create(family_id,task_id,instruction,trigger,schedule,timezone)

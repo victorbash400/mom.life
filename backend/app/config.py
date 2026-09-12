@@ -32,6 +32,12 @@ class Settings(BaseSettings):
     )
 
     @property
+    def model_request_fields(self) -> dict:
+        if self.strands_model_id == "moonshotai.kimi-k2.5":
+            return {"thinking": {"type": "disabled"}}
+        return {}
+
+    @property
     def allowed_origins(self) -> list[str]:
         return [origin.strip() for origin in self.cors_origins.split(",") if origin.strip()]
 

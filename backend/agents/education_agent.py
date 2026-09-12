@@ -3,7 +3,7 @@ import json
 
 import boto3
 from strands import Agent, tool
-from strands.models import BedrockModel
+from agents.model import FamilyBedrockModel as BedrockModel
 from strands.tools.executors import SequentialToolExecutor
 
 from app.config import Settings, get_settings
@@ -119,7 +119,7 @@ async def run_education_agent(store: TaskStore, family_id: str, review_id: str, 
     session = boto3.Session(profile_name=config.aws_profile or None, region_name=config.strands_region)
     agent = Agent(
         name="mom_life_education_agent",
-        model=BedrockModel(boto_session=session, model_id=config.strands_model_id, temperature=0.1, max_tokens=config.model_max_tokens, service_tier=config.model_service_tier),
+        model=BedrockModel(boto_session=session, model_id=config.strands_model_id, temperature=0.1, max_tokens=config.model_max_tokens, service_tier=config.model_service_tier, additional_request_fields=config.model_request_fields),
         system_prompt=EDUCATION_PROMPT,
         tools=[read_education_context, read_education_snapshot_skill, list_education_source_tools, read_education_source, update_education_snapshot, complete_education_review],
         tool_executor=SequentialToolExecutor(),

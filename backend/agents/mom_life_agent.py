@@ -3,7 +3,7 @@ from pathlib import Path
 import boto3
 from strands import Agent
 from strands.hooks import AfterToolCallEvent, HookRegistry
-from strands.models import BedrockModel
+from agents.model import FamilyBedrockModel as BedrockModel
 from strands.session.file_session_manager import FileSessionManager
 
 from app.config import Settings, get_settings
@@ -55,7 +55,7 @@ def create_mom_life_agent(session_id: str, tool_events: ToolEventRecorder | None
         agent_id="mom-life",
         callback_handler=None,
         hooks=[tool_events] if tool_events else None,
-        model=BedrockModel(boto_session=boto_session, model_id=config.strands_model_id, temperature=0.2, max_tokens=config.model_max_tokens, service_tier=config.model_service_tier),
+        model=BedrockModel(boto_session=boto_session, model_id=config.strands_model_id, temperature=0.2, max_tokens=config.model_max_tokens, service_tier=config.model_service_tier, additional_request_fields=config.model_request_fields),
         name="mom.life",
         session_manager=session_manager or FileSessionManager(session_id=session_id, storage_dir=str(SESSION_DIRECTORY)),
         system_prompt=SYSTEM_PROMPT,

@@ -4,7 +4,7 @@ from typing import Literal
 
 import boto3
 from strands import Agent, tool
-from strands.models import BedrockModel
+from agents.model import FamilyBedrockModel as BedrockModel
 from strands.tools.executors import SequentialToolExecutor
 
 from app.config import Settings, get_settings
@@ -158,7 +158,7 @@ async def run_intake_agent(store: TaskStore, family_id: str, incoming_id: str, s
     session = boto3.Session(profile_name=config.aws_profile or None, region_name=config.strands_region)
     agent = Agent(
         name="mom_life_intake_agent",
-        model=BedrockModel(boto_session=session, model_id=config.strands_model_id, temperature=0.1, max_tokens=config.model_max_tokens, service_tier=config.model_service_tier),
+        model=BedrockModel(boto_session=session, model_id=config.strands_model_id, temperature=0.1, max_tokens=config.model_max_tokens, service_tier=config.model_service_tier, additional_request_fields=config.model_request_fields),
         system_prompt=INTAKE_PROMPT,
         tools=[read_intake_context, read_intake_routing_skill, update_intake_memory, decide_intake_action],
         tool_executor=SequentialToolExecutor(),
