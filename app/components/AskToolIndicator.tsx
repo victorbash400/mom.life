@@ -1,8 +1,13 @@
-import { CalendarClock, ClipboardList, ListTodo, SquareTerminal, Users, type LucideIcon } from "lucide-react";
+import { Bell, CalendarClock, ClipboardList, Clock3, ListTodo, SquareTerminal, Users, type LucideIcon } from "lucide-react";
 import type { ToolMessage } from "../types/chat";
 import styles from "./AskToolIndicator.module.css";
 
 const icons: Record<string, LucideIcon> = {
+  list_automations: Clock3,
+  create_automation: CalendarClock,
+  change_automation: CalendarClock,
+  delete_automation: Clock3,
+  notify_mom: Bell,
   get_current_datetime: CalendarClock,
   get_family_context: Users,
   list_goal_tasks: ListTodo,

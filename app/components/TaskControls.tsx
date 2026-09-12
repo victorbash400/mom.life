@@ -5,8 +5,8 @@ import { useFamily } from "./FamilyProvider";
 import { TaskPicker } from "./TaskPicker";
 import styles from "./TaskControls.module.css";
 
-export type TaskFilter = "all" | "active" | "paused" | "completed";
-const filters: { key: TaskFilter; label: string }[] = [{ key: "all", label: "All" }, { key: "active", label: "Active" }, { key: "paused", label: "Paused" }, { key: "completed", label: "Completed" }];
+export type TaskFilter = "all" | "active" | "paused" | "completed" | "automations";
+const filters: { key: TaskFilter; label: string }[] = [{ key: "all", label: "All" }, { key: "active", label: "Active" }, { key: "paused", label: "Paused" }, { key: "completed", label: "Completed" }, { key: "automations", label: "Automations" }];
 
 export function TaskControls({ child, filter, sort, onChildChange, onFilterChange, onSortChange }: { child: string; filter: TaskFilter; sort: string; onChildChange: (child: string) => void; onFilterChange: (filter: TaskFilter) => void; onSortChange: (sort: string) => void }) {
   const { family: { children } } = useFamily();
