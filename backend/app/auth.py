@@ -16,7 +16,7 @@ from starlette.responses import JSONResponse
 
 DEMO_EMAIL = 'demo@mom.life'
 DEMO_PASSWORD = 'MomLifeDemo!'
-SESSION_SECONDS = 60 * 60 * 24
+SESSION_SECONDS = 60 * 60 * 24 * 30
 
 
 class Sessions:
@@ -24,10 +24,13 @@ class Sessions:
         self.path = path
         if isinstance(path, Path):
             path.parent.mkdir(parents=True, exist_ok=True)
-        with connect(path) as db:
+            self.initialize()
+
+    def initialize(self):
+        with connect(self.path) as db:
             db.execute('CREATE TABLE IF NOT EXISTS auth_sessions (digest TEXT PRIMARY KEY, family_id TEXT NOT NULL, expires_at REAL NOT NULL)')
 
-    def create(self, family_id='sarah-family'):
+    def create(self, family_id):
         token = secrets.token_urlsafe(32)
         with connect(self.path) as db:
             db.execute('DELETE FROM auth_sessions WHERE expires_at <= ?', (time.time(),))
@@ -50,10 +53,25 @@ class Sessions:
 
 sessions = Sessions(get_settings().database_url)
 families = FamilyStore(get_settings().database_url)
-families.seed_demo()
-families.seed_parent_folders()
 hasher = PasswordHasher()
 router = APIRouter(prefix='/api/auth')
+
+
+def ensure_demo_account():
+    account = families.account(DEMO_EMAIL)
+    if account:
+        return account
+    try:
+        families.register('Sarah', DEMO_EMAIL, hasher.hash(DEMO_PASSWORD), family_id='sarah-family')
+    except UniqueViolation:
+        account = families.account(DEMO_EMAIL)
+        if account:
+            return account
+        raise
+    account = families.account(DEMO_EMAIL)
+    if not account:
+        raise RuntimeError('Demo account creation did not persist.')
+    return account
 
 
 class Login(BaseModel):
@@ -68,11 +86,8 @@ def bearer(request):
 
 @router.post('/login')
 def login(body: Login):
-    valid_email = secrets.compare_digest(body.email.strip().lower().encode(), DEMO_EMAIL.encode())
-    valid_password = secrets.compare_digest(body.password.encode(), DEMO_PASSWORD.encode())
-    if valid_email and valid_password:
-        return {'token': sessions.create(), 'family_id': 'sarah-family', 'expires_in': SESSION_SECONDS}
-    account = families.account(body.email.strip().lower())
+    email = body.email.strip().lower()
+    account = ensure_demo_account() if secrets.compare_digest(email.encode(), DEMO_EMAIL.encode()) else families.account(email)
     try:
         if not account or not hasher.verify(account['password_hash'], body.password):
             raise HTTPException(401, 'Email or password is incorrect.')
@@ -83,10 +98,11 @@ def login(body: Login):
 
 @router.get('/session')
 def session(request: Request):
-    family = sessions.family(bearer(request))
-    if not family:
+    family = request.state.family_id
+    profile = families.profile(family)
+    if not profile:
         raise HTTPException(401, 'Sign in to continue.')
-    return {'family_id': family, **families.profile(family), 'demo': family == 'sarah-family'}
+    return {'family_id': family, **profile, 'demo': profile['email'] == DEMO_EMAIL}
 
 
 @router.post('/logout', status_code=204)

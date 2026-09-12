@@ -80,7 +80,6 @@ DYNAMIC_OAUTH_PROVIDERS = {
         'token_endpoint_auth_method':'client_secret_post',
     },
 }
-_INITIALIZED_DATABASES = set()
 _CONFIG_CACHE = {}
 
 
@@ -97,23 +96,6 @@ class OAuthConnections:
             with os.fdopen(descriptor,'wb') as file:
                 file.write(Fernet.generate_key())
         self.cipher=Fernet(key_path.read_bytes())
-        target = str(store.database)
-        if target not in _INITIALIZED_DATABASES:
-            with store._connect() as db:
-                db.executescript('''
-                    CREATE TABLE IF NOT EXISTS oauth_attempts (
-                        state TEXT PRIMARY KEY, family_id TEXT NOT NULL, plugin_id TEXT NOT NULL,
-                        verifier TEXT NOT NULL, config TEXT NOT NULL, expires_at REAL NOT NULL
-                    );
-                    CREATE TABLE IF NOT EXISTS oauth_tokens (
-                        family_id TEXT NOT NULL, plugin_id TEXT NOT NULL, token TEXT NOT NULL,
-                        PRIMARY KEY(family_id,plugin_id)
-                    );
-                    CREATE TABLE IF NOT EXISTS oauth_clients (
-                        plugin_id TEXT PRIMARY KEY, config TEXT NOT NULL
-                    );
-                ''')
-            _INITIALIZED_DATABASES.add(target)
 
     def connection_snapshots(self, family_id, plugin_ids, rows=None):
         if not plugin_ids:

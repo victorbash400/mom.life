@@ -57,8 +57,10 @@ async def run_education_agent(store: TaskStore, family_id: str, review_id: str, 
         return await load_read_tools(plugin_id)
 
     @tool
-    async def read_education_source(plugin_id: str, name: str, arguments: dict[str, object]) -> dict[str, object]:
-        """Call an exact read tool from a connected Education-category plugin."""
+    async def read_education_source(child_id: str, plugin_id: str, name: str, arguments: dict[str, object]) -> dict[str, object]:
+        """Call an exact read tool for one child from a connected Education-category plugin."""
+        if not store.runtime_plugin_access(family_id,plugin_id,child_id)['enabled']:
+            raise ValueError("This source is turned off for this child's profile. Use another enabled source or continue without it.")
         directory = await load_read_tools(plugin_id)
         if name not in {item["name"] for item in directory}:
             raise ValueError("Select an exact read tool returned by the education source.")

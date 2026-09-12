@@ -40,6 +40,24 @@ def test_runtime_enforces_namespace_and_revoked_permissions(tmp_path):
         runtime.require_access('todoist')
 
 
+def test_profile_can_disable_one_connected_source(tmp_path):
+    store=TaskStore(tmp_path/'profile-access.db')
+    store.install_plugin('family','todoist')
+    with store._connect() as connection:
+        connection.execute("INSERT INTO plugin_connections VALUES (?,?,?)",('family','todoist','now'))
+    store.set_profile_plugin_access('family','child-1','todoist',False)
+    plugin_ids, access = store.profile_plugin_access('family')
+    assert plugin_ids == ['todoist']
+    assert access[('child-1','todoist')] is False
+    runtime=PluginToolSession(['todoist'],store,'family','child-1')
+    with pytest.raises(RuntimeError,match='turned off for this profile'):
+        runtime.require_access('todoist')
+    assert PluginToolSession(['todoist'],store,'family','child-2').require_access('todoist')['enabled'] is True
+    store.set_profile_plugin_access('family','parent','todoist',False)
+    with pytest.raises(RuntimeError,match='turned off for this profile'):
+        PluginToolSession(['todoist'],store,'family','all').require_access('todoist')
+
+
 def test_google_maps_uses_server_key_without_family_binding(tmp_path,monkeypatch):
     monkeypatch.setenv('MOM_LIFE_PLUGIN_GOOGLE_MAPS_TOKEN','maps-key')
     store=TaskStore(tmp_path/'maps.db')
@@ -236,7 +254,6 @@ def test_browser_cleanup_retains_handle_until_stop_succeeds(tmp_path, monkeypatc
     goal = store.create('family', 'child', 'Browser work')
     assignment = store.create_assignment(goal['id'], {'title': 'Form', 'instruction': 'Prepare form'})
     with store._connect() as db:
-        db.execute('CREATE TABLE browser_sessions (assignment_id TEXT PRIMARY KEY, session_id TEXT, expires_at REAL)')
         db.execute('INSERT INTO browser_sessions VALUES (?, ?, ?)', (assignment, 'retained-session', 1))
     client = SimpleNamespace(
         stop_browser_session=Mock(side_effect=RuntimeError('AWS unavailable') if fails else None),

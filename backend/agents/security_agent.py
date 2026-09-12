@@ -33,14 +33,14 @@ async def run_security_agent(store: TaskStore, family_id: str, review_id: str, s
         if not review or not review["incoming"]:
             raise ValueError("The safety review source is unavailable.")
         from app.auth import families
+        parent, children = families.snapshot(family_id)
         return {
             "review": {key: value for key, value in review.items() if key not in {"activities", "incoming"}},
             "incoming": review["incoming"],
             "settings": store.security_settings(family_id),
             "family": {
-                "parent": json.loads(json.dumps(dict(families.profile(family_id)), default=str)),
-                "children": json.loads(json.dumps([dict(child) for child in families.list_children(family_id)], default=str)),
-                "context": store.family_context(family_id),
+                "parent": json.loads(json.dumps(dict(parent), default=str)),
+                "children": json.loads(json.dumps([dict(child) for child in children], default=str)),
             },
         }
 

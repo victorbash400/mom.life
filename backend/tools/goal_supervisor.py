@@ -27,7 +27,9 @@ def supervisor_tools(family_id):
 
     @tool
     def get_family_context() -> dict:
-        """Read the family profile; never look for child identity in external plugins."""
-        return task_store.family_context(family_id)
+        """Read the authoritative parent and child profiles when family identity matters."""
+        from app.auth import families
+        parent, children = families.snapshot(family_id)
+        return {"parent": dict(parent), "children": [dict(child) for child in children]}
 
     return [list_goal_tasks,create_family_goal,revise_goal_plan,get_family_context]

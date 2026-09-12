@@ -60,6 +60,7 @@ def test_simulated_whatsapp_reaches_the_real_intake_store(tmp_path, monkeypatch,
     )
 
     assert response.status_code == 201
+    assert response.json()["message"]["body"] == "My school trip form is due Friday."
     item = store.incoming_items("family")[0]
     assert item["source"] == "whatsapp"
     assert item["content"] == "My school trip form is due Friday."

@@ -12,24 +12,10 @@ SAMPLE_UNITS = {
     'heart_rate': 'count/min',
     'sleep_analysis': 'stage',
 }
-_INITIALIZED_DATABASES = set()
-
-
 class AppleHealthAdapter:
     def __init__(self, family_id, store):
         self.family_id = family_id
         self.store = store
-        target = str(store.database)
-        if target in _INITIALIZED_DATABASES:
-            return
-        with store._connect() as db:
-            db.execute('''CREATE TABLE IF NOT EXISTS apple_health_samples (
-                family_id TEXT NOT NULL, external_id TEXT NOT NULL, child_id TEXT NOT NULL,
-                sample_type TEXT NOT NULL, start_at TEXT NOT NULL, end_at TEXT NOT NULL,
-                value REAL NOT NULL, unit TEXT NOT NULL, source TEXT NOT NULL, updated_at TEXT NOT NULL,
-                PRIMARY KEY (family_id, external_id)
-            )''')
-        _INITIALIZED_DATABASES.add(target)
 
     def directory(self):
         filters = {'child_id':field('child_id','Child profile ID'),'date':field('date','Date in YYYY-MM-DD format')}

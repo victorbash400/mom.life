@@ -2,12 +2,15 @@
 import sqlite3
 from pathlib import Path
 from psycopg import connect, sql
+from app.auth import families, sessions
 from app.task_store import TaskStore
 
 
 def migrate(url):
     root = Path(__file__).resolve().parents[1] / 'data'
-    TaskStore(url)
+    families.initialize()
+    sessions.initialize()
+    TaskStore(url).initialize()
     with connect(url) as destination:
         destination.execute('CREATE TABLE IF NOT EXISTS schema_migrations (name TEXT PRIMARY KEY)')
         destination.execute('SELECT pg_advisory_xact_lock(72461903)')

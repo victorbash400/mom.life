@@ -9,11 +9,12 @@ from psycopg.rows import dict_row
 from psycopg_pool import ConnectionPool
 
 _pools = {}
+CONNECTION_TIMEOUT = 10
 
 
 def close_pools():
     for pool in _pools.values():
-        pool.close()
+        pool.close(timeout=1)
     _pools.clear()
 
 
@@ -94,15 +95,14 @@ def connect(target):
     if target not in _pools:
         pool = ConnectionPool(
             target,
-            min_size=4,
+            min_size=1,
             max_size=10,
-            kwargs={'row_factory': dict_row, 'connect_timeout': 5},
-            check=ConnectionPool.check_connection,
+            kwargs={'row_factory': dict_row, 'connect_timeout': CONNECTION_TIMEOUT},
             open=False,
         )
-        pool.open(wait=True)
+        pool.open()
         _pools[target] = pool
-    with _pools[target].connection() as connection:
+    with _pools[target].connection(timeout=CONNECTION_TIMEOUT) as connection:
         yield Connection(connection)
 
 

@@ -24,9 +24,6 @@ class BrowserAdapter:
         self.store = store
         self.assignment_id = assignment_id
         self.preserve_session = False
-        if store:
-            with store._connect() as db:
-                db.execute("CREATE TABLE IF NOT EXISTS browser_sessions (assignment_id TEXT PRIMARY KEY REFERENCES goal_assignments(id) ON DELETE CASCADE, session_id TEXT NOT NULL, expires_at REAL NOT NULL)")
         config = get_settings()
         self.client = BrowserClient(config.strands_region)
         self.aws_session = None

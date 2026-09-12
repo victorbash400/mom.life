@@ -1,55 +1,115 @@
 import asyncio
 import json
+
 import pytest
 from fastapi.testclient import TestClient
-from app import main, chat_routes, chat_stream
-from app.chat_store import ChatStore
+from strands.types.session import SessionAgent, SessionMessage
+
+from app import chat_routes, chat_stream, main
+from app.chat_sessions import AGENT_ID, ChatSessions
 
 
 @pytest.fixture
 def store(tmp_path, monkeypatch):
-    store = ChatStore(tmp_path / 'chats.sqlite3')
-    monkeypatch.setattr(chat_routes, 'chats', store)
-    return store
+    sessions = ChatSessions(tmp_path / "sessions")
+    monkeypatch.setattr(chat_routes, "chats", sessions)
+    return sessions
 
 
-def test_history_persists_and_is_family_scoped(store, auth_headers):
+def add_messages(store, family_id, chat_id, *messages):
+    manager = store.ensure(family_id, chat_id)
+    manager.create_agent(chat_id, SessionAgent(agent_id=AGENT_ID, state={}, conversation_manager_state={}))
+    for index, (role, content) in enumerate(messages):
+        manager.create_message(chat_id, AGENT_ID, SessionMessage.from_message({"role": role, "content": [{"text": content}]}, index))
+
+
+def test_history_is_owned_by_strands_and_family_scoped(store, auth_headers):
     client = TestClient(main.app)
-    client.headers.update(auth_headers('one'))
-    chat = client.post('/api/chats').json()
-    store.append('one', chat['id'], 'user', 'Plan the school week')
-    store.append('one', chat['id'], 'assistant', 'What time does school start?')
-    reopened = ChatStore(store.target).get('one', chat['id'])
-    assert reopened['title'] == 'Plan the school week'
-    assert len(reopened['messages']) == 2
-    assert client.get('/api/chats').json()[0]['id'] == chat['id']
-    client.headers.update(auth_headers('two'))
-    assert client.get('/api/chats').json() == []
+    client.headers.update(auth_headers("one"))
+    chat = client.post("/api/chats").json()
+    add_messages(store, "one", chat["id"], ("user", "Plan the school week"), ("assistant", "What time does school start?"))
+    reopened = ChatSessions(store.root).get("one", chat["id"])
+    assert reopened["title"] == "Plan the school week"
+    assert [message["content"] for message in reopened["messages"]] == ["Plan the school week", "What time does school start?"]
+    assert client.get("/api/chats").json()[0]["id"] == chat["id"]
+    client.headers.update(auth_headers("two"))
+    assert client.get("/api/chats").json() == []
     assert client.get(f"/api/chats/{chat['id']}").status_code == 404
     assert client.delete(f"/api/chats/{chat['id']}").status_code == 404
-    assert client.post('/api/chat/stream', json={'family_id': 'two', 'chat_id': chat['id'], 'message': 'hello'}).status_code == 404
-    client.headers.update(auth_headers('one'))
+    client.headers.update(auth_headers("one"))
     assert client.delete(f"/api/chats/{chat['id']}").status_code == 204
-    assert client.get('/api/chats').json() == []
+    assert client.get("/api/chats").json() == []
 
 
-def test_stream_saves_reply_and_surfaces_errors(store, monkeypatch):
+def test_stream_uses_the_strands_session_without_copying_messages(store, monkeypatch):
     asyncio.run(check_stream(store, monkeypatch))
 
 
 async def check_stream(store, monkeypatch):
+    chat = store.create("one")
+
+    class Agent:
+        def __init__(self, manager):
+            self.manager = manager
+
+        async def stream_async(self, message):
+            self.manager.create_agent(chat["id"], SessionAgent(agent_id=AGENT_ID, state={}, conversation_manager_state={}))
+            self.manager.create_message(chat["id"], AGENT_ID, SessionMessage.from_message({"role": "user", "content": [{"text": message}]}, 0))
+            yield {"data": "Hello "}
+            yield {"data": "there"}
+            self.manager.create_message(chat["id"], AGENT_ID, SessionMessage.from_message({"role": "assistant", "content": [{"text": "Hello there"}]}, 1))
+
+    monkeypatch.setattr(chat_stream, "create_mom_life_agent", lambda *args, session_manager, **kwargs: Agent(session_manager))
+    events = [json.loads(event[6:]) async for event in chat_stream.stream_agent_events(family_id="one", chat_id=chat["id"], message="Hi")]
+    assert events[-1]["type"] == "done"
+    assert [message["content"] for message in store.get("one", chat["id"])["messages"]] == ["Hi", "Hello there"]
+
+    def fail(*args, **kwargs):
+        raise RuntimeError("Provider unavailable")
+
+    monkeypatch.setattr(chat_stream, "create_mom_life_agent", fail)
+    events = [event async for event in chat_stream.stream_agent_events(family_id="one", chat_id=chat["id"], message="Again")]
+    assert "Provider unavailable" in events[-1]
+
+
+def test_tool_history_preserves_order_and_result_status(store):
+    chat = store.create("one")
+    manager = store.ensure("one", chat["id"])
+    manager.create_agent(chat["id"], SessionAgent(agent_id=AGENT_ID, state={}, conversation_manager_state={}))
+    blocks = [
+        {"role": "assistant", "content": [{"text": "Checking."}, {"toolUse": {"toolUseId": "call-1", "name": "get_family_context", "input": {}}}]},
+        {"role": "user", "content": [{"toolResult": {"toolUseId": "call-1", "status": "success", "content": [{"text": "Private result"}]}}]},
+        {"role": "assistant", "content": [{"text": "Done."}]},
+    ]
+    for index, message in enumerate(blocks):
+        manager.create_message(chat["id"], AGENT_ID, SessionMessage.from_message(message, index))
+    messages = store.get("one", chat["id"])["messages"]
+    assert len(messages) == 3
+    assert messages[0]["content"] == "Checking."
+    assert messages[1] == {"id": "call-1", "kind": "tool", "name": "get_family_context", "status": "done"}
+    assert messages[2]["content"] == "Done."
+
+
+def test_stream_deduplicates_strands_tool_deltas(store, monkeypatch):
+    chat = store.create("one")
+
     class Agent:
         async def stream_async(self, message):
-            yield {'data': 'Hello '}
-            yield {'data': 'there'}
-    monkeypatch.setattr(chat_stream, 'create_mom_life_agent', lambda *args, **kwargs: Agent())
-    chat = store.create('one')
-    events = [json.loads(event[6:]) async for event in chat_stream.stream_agent_events(family_id='one', chat_id=chat['id'], message='Hi')]
-    assert events[-1]['type'] == 'done'
-    assert [message['content'] for message in store.get('one', chat['id'])['messages']] == ['Hi', 'Hello there']
-    def fail(*args, **kwargs):
-        raise RuntimeError('Provider unavailable')
-    monkeypatch.setattr(chat_stream, 'create_mom_life_agent', fail)
-    events = [event async for event in chat_stream.stream_agent_events(family_id='one', chat_id=chat['id'], message='Again')]
-    assert 'Provider unavailable' in events[-1]
-    assert store.get('one', chat['id'])['messages'][-1]['content'] == 'Again'
+            yield {"current_tool_use": {"toolUseId": "call-1", "name": "get_current_datetime", "input": ""}}
+            yield {"current_tool_use": {"toolUseId": "call-1", "name": "get_current_datetime", "input": "{}"}}
+            recorder._completed.append({"id": "call-1", "name": "get_current_datetime", "status": "done"})
+            yield {"data": "Today"}
+
+    def create(session_id, tool_events, **kwargs):
+        nonlocal recorder
+        recorder = tool_events
+        return Agent()
+
+    recorder = None
+    monkeypatch.setattr(chat_stream, "create_mom_life_agent", create)
+
+    async def collect():
+        return [json.loads(event[6:]) async for event in chat_stream.stream_agent_events(family_id="one", chat_id=chat["id"], message="Date?")]
+
+    events = asyncio.run(collect())
+    assert [event["type"] for event in events] == ["tool_call", "tool_response", "content", "done"]

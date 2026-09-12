@@ -19,6 +19,32 @@ class ChildWrite(BaseModel):
     notifications: bool = True
 
 
+class ParentWrite(BaseModel):
+    name: str = Field(min_length=1,max_length=100)
+    email: str = Field(max_length=254)
+
+
+class PluginAccessWrite(BaseModel):
+    profile_id: str = Field(min_length=1,max_length=100)
+    enabled: bool
+
+
+async def normalized_photo(file: UploadFile):
+    content = await file.read(5 * 1024 * 1024 + 1)
+    if len(content) > 5 * 1024 * 1024:
+        raise HTTPException(413,'Choose a picture smaller than 5 MB.')
+    try:
+        with Image.open(BytesIO(content)) as image:
+            if image.width * image.height > 25_000_000:
+                raise ValueError()
+            image.thumbnail((512,512))
+            output = BytesIO()
+            image.convert('RGB').save(output,format='JPEG',quality=85)
+            return output.getvalue()
+    except (UnidentifiedImageError,ValueError,OSError,Image.DecompressionBombError):
+        raise HTTPException(400,'Choose a valid image.')
+
+
 def require_child(request, identity):
     family = request.state.family_id
     if not families.child(family, identity):
@@ -30,6 +56,8 @@ def require_child(request, identity):
 def family(request: Request):
     identity = request.state.family_id
     parent, children = families.snapshot(identity)
+    if not parent:
+        raise HTTPException(401, 'Sign in to continue.')
     for child in children:
         born = child['birth_date']
         today = date.today()
@@ -71,25 +99,14 @@ async def remove_child(identity: str, request: Request):
             task_store.set_goal_state(goal['id'],status='paused',run_state='paused',current_step='Child profile removed')
     task_store.delete_education_snapshot(family, identity)
     task_store.remove_simulator_profile(family, identity)
+    task_store.remove_profile_plugin_access(family, identity)
     families.remove_child(family,identity)
 
 
 @router.put('/children/{identity}/photo')
 async def photo(identity: str, request: Request, file: UploadFile = File()):
     family = require_child(request,identity)
-    content = await file.read(5 * 1024 * 1024 + 1)
-    if len(content) > 5 * 1024 * 1024:
-        raise HTTPException(413,'Choose a picture smaller than 5 MB.')
-    try:
-        with Image.open(BytesIO(content)) as image:
-            if image.width * image.height > 25_000_000:
-                raise ValueError()
-            image.thumbnail((512,512))
-            output = BytesIO()
-            image.convert('RGB').save(output,format='JPEG',quality=85)
-    except (UnidentifiedImageError,ValueError,OSError,Image.DecompressionBombError):
-        raise HTTPException(400,'Choose a valid image.')
-    families.update_child(family,identity,{'photo':output.getvalue(),'photo_type':'image/jpeg'})
+    families.update_child(family,identity,{'photo':await normalized_photo(file),'photo_type':'image/jpeg'})
     return {'id':identity}
 
 
@@ -99,7 +116,65 @@ def get_photo(identity: str, request: Request):
     child = families.child(family,identity)
     if not child['photo']:
         raise HTTPException(404,'No photo uploaded.')
-    return Response(bytes(child['photo']),media_type='image/jpeg')
+    return Response(bytes(child['photo']),media_type=child['photo_type'] or 'image/jpeg')
+
+
+@router.put('/parent/photo')
+async def parent_photo(request: Request, file: UploadFile = File()):
+    family = request.state.family_id
+    if not families.update_parent_photo(family,await normalized_photo(file),'image/jpeg'):
+        raise HTTPException(404,'Parent profile not found.')
+    return {'id':family}
+
+
+@router.patch('/parent')
+def update_parent(body: ParentWrite, request: Request):
+    name = body.name.strip()
+    email = body.email.strip().lower()
+    if not name or email.count('@') != 1 or '.' not in email.split('@')[-1] or any(char.isspace() for char in email):
+        raise HTTPException(400,'Enter a name and valid email.')
+    try:
+        if not families.update_parent(request.state.family_id,name,email):
+            raise HTTPException(404,'Parent profile not found.')
+    except UniqueViolation:
+        raise HTTPException(409,'An account with this email already exists.')
+    return {'id':request.state.family_id}
+
+
+@router.get('/parent/photo')
+def get_parent_photo(request: Request):
+    photo = families.parent_photo(request.state.family_id)
+    if not photo or not photo['photo']:
+        raise HTTPException(404,'No photo uploaded.')
+    return Response(bytes(photo['photo']),media_type=photo['photo_type'] or 'image/jpeg')
+
+
+@router.get('/plugin-access')
+def plugin_access(request: Request):
+    from app.main import task_store
+    from plugins.catalog import plugin_by_id
+    plugin_ids, access = task_store.profile_plugin_access(request.state.family_id)
+    return {'sources': [
+        {'id':plugin_id,'name':plugin_by_id(plugin_id).name,'profiles':{
+            profile_id:enabled for (profile_id,access_plugin),enabled in access.items() if access_plugin == plugin_id
+        }} for plugin_id in plugin_ids
+    ]}
+
+
+@router.patch('/plugin-access/{plugin_id}')
+def update_plugin_access(plugin_id: str, body: PluginAccessWrite, request: Request):
+    from app.main import task_store
+    from plugins.catalog import plugin_by_id
+    try:
+        plugin_by_id(plugin_id)
+    except ValueError as error:
+        raise HTTPException(404,str(error)) from error
+    family = request.state.family_id
+    if body.profile_id != 'parent' and not families.child(family,body.profile_id):
+        raise HTTPException(404,'Profile not found.')
+    if not task_store.set_profile_plugin_access(family,body.profile_id,plugin_id,body.enabled):
+        raise HTTPException(409,'This source is not connected.')
+    return {'id':plugin_id,'profile_id':body.profile_id,'enabled':body.enabled}
 
 
 def require_owner(request, identity):

@@ -21,6 +21,7 @@ def test_registration_children_and_folders_postgres():
             families.append(family['id'])
             assert family['children'] == []
             assert family['parent']['name'] == 'Test Parent'
+            assert family['parent']['has_photo'] is False
             assert client.post('/api/auth/register', json={'name':'Again','email':email,'password':'TestPassword!123'}).status_code == 409
             assert client.post('/api/auth/login', json={'email':email,'password':'TestPassword!123'}).status_code == 200
         client, other = clients
@@ -37,6 +38,9 @@ def test_registration_children_and_folders_postgres():
         assert client.get('/api/family').json()['children'][0]['notifications'] is False
         assert client.get(root+'/avatar').headers['content-type'].startswith('image/svg+xml')
         output=BytesIO(); Image.new('RGB',(12,12),'red').save(output,format='PNG')
+        assert client.put('/api/family/parent/photo',files={'file':('parent.png',output.getvalue(),'image/png')}).status_code == 200
+        assert client.get('/api/family/parent/photo').headers['content-type']=='image/jpeg'
+        assert client.get('/api/family').json()['parent']['has_photo'] is True
         assert client.put(root+'/photo',files={'file':('photo.png',output.getvalue(),'image/png')}).status_code == 200
         assert client.get(root+'/photo').headers['content-type']=='image/jpeg'
         folder = client.post(root+'/folders',json={'name':'School'}).json()['id']

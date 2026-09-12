@@ -1,5 +1,4 @@
 import asyncio
-import hashlib
 import json
 from collections.abc import AsyncIterator
 
@@ -10,25 +9,24 @@ _session_locks: dict[str, asyncio.Lock] = {}
 
 
 async def stream_agent_events(*, family_id: str, chat_id: str, message: str) -> AsyncIterator[str]:
-    session_id = hashlib.sha256(f"{family_id}:{chat_id}".encode()).hexdigest()
+    from app.chat_routes import chats
+    session = chats.ensure(family_id, chat_id)
+    session_id = session.session_id
     lock = _session_locks.setdefault(session_id, asyncio.Lock())
     async with lock:
-        from app.chat_routes import chats
-        chats.append(family_id, chat_id, "user", message)
-        answer = ""
-        saved = False
         tool_events = ToolEventRecorder()
+        seen_tools: set[str] = set()
         try:
-            agent = create_mom_life_agent(session_id, tool_events, family_id=family_id)
+            agent = create_mom_life_agent(session_id, tool_events, family_id=family_id, session_manager=session)
             async for event in agent.stream_async(message):
                 for completed in tool_events.drain():
                     yield _sse({"type": "tool_response", **completed})
                 content = event.get("data")
                 if isinstance(content, str) and content:
-                    answer += content
                     yield _sse({"type": "content", "content": content})
                 tool_use = event.get("current_tool_use")
-                if isinstance(tool_use, dict) and tool_use.get("toolUseId"):
+                if isinstance(tool_use, dict) and tool_use.get("toolUseId") and tool_use.get("name") and tool_use["toolUseId"] not in seen_tools:
+                    seen_tools.add(tool_use["toolUseId"])
                     yield _sse({
                         "type": "tool_call",
                         "id": str(tool_use["toolUseId"]),
@@ -37,13 +35,8 @@ async def stream_agent_events(*, family_id: str, chat_id: str, message: str) -> 
                     })
             for completed in tool_events.drain():
                 yield _sse({"type": "tool_response", **completed})
-            chats.append(family_id, chat_id, "assistant", answer)
-            saved = True
             yield _sse({"type": "done"})
         except Exception as error:
-            if answer:
-                chats.append(family_id, chat_id, "assistant", answer)
-            saved = True
             yield _sse({"type": "error", "error": str(error)})
 
 

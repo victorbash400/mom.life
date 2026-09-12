@@ -6,7 +6,9 @@ from app.database import batch, connect
 class FamilyStore:
     def __init__(self, url):
         self.url = url
-        with connect(url) as db:
+
+    def initialize(self):
+        with connect(self.url) as db:
             db.executescript('''
                 CREATE TABLE IF NOT EXISTS families (
                     id TEXT PRIMARY KEY, name TEXT NOT NULL, created_at TIMESTAMPTZ NOT NULL DEFAULT now()
@@ -14,6 +16,7 @@ class FamilyStore:
                 CREATE TABLE IF NOT EXISTS accounts (
                     id TEXT PRIMARY KEY, family_id TEXT NOT NULL REFERENCES families(id),
                     email TEXT NOT NULL UNIQUE, name TEXT NOT NULL, password_hash TEXT NOT NULL,
+                    photo BYTEA, photo_type TEXT, photo_version INTEGER NOT NULL DEFAULT 0,
                     created_at TIMESTAMPTZ NOT NULL DEFAULT now()
                 );
                 CREATE TABLE IF NOT EXISTS children (
@@ -38,6 +41,9 @@ class FamilyStore:
                     CHECK(kind='file' OR content IS NULL)
                 );
                 ALTER TABLE children ADD COLUMN IF NOT EXISTS photo_version INTEGER NOT NULL DEFAULT 0;
+                ALTER TABLE accounts ADD COLUMN IF NOT EXISTS photo BYTEA;
+                ALTER TABLE accounts ADD COLUMN IF NOT EXISTS photo_type TEXT;
+                ALTER TABLE accounts ADD COLUMN IF NOT EXISTS photo_version INTEGER NOT NULL DEFAULT 0;
                 CREATE TABLE IF NOT EXISTS family_nodes (
                     id TEXT PRIMARY KEY, family_id TEXT NOT NULL REFERENCES families(id),
                     child_id TEXT NOT NULL CHECK(child_id='parent'), parent_id TEXT, name TEXT NOT NULL,
@@ -53,35 +59,11 @@ class FamilyStore:
                 CREATE UNIQUE INDEX IF NOT EXISTS child_nodes_unique_name ON child_nodes(child_id,coalesce(parent_id,''),lower(name));
             ''')
 
-    def seed_demo(self):
-        from datetime import date
+    def register(self, name, email, password_hash, family_id=None):
+        family_id, account_id = family_id or str(uuid4()), str(uuid4())
         with connect(self.url) as db:
-            db.execute('SELECT pg_advisory_xact_lock(72461904)')
-            db.execute('CREATE TABLE IF NOT EXISTS family_migrations (name TEXT PRIMARY KEY)')
-            if db.execute("SELECT name FROM family_migrations WHERE name='demo_children_v1'").fetchone():
-                return
-            db.execute("INSERT INTO families(id,name) VALUES ('sarah-family','Sarah') ON CONFLICT DO NOTHING")
-            for identity,name,years in [('noah','Noah',5),('amina','Amina',8),('lila','Lila',2)]:
-                today = date.today()
-                born = date(today.year-years,today.month,min(today.day,28))
-                db.execute('INSERT INTO children(id,family_id,name,birth_date,avatar_seed) VALUES (?,?,?,?,?) ON CONFLICT DO NOTHING',(identity,'sarah-family',name,born,identity))
-                for folder in ['Profile','Health','Documents','Activities','School','Routines','Milestones']:
-                    db.execute("INSERT INTO child_nodes(id,family_id,child_id,name,kind) VALUES (?,?,?,?,'folder') ON CONFLICT DO NOTHING",(str(uuid4()),'sarah-family',identity,folder))
-            db.execute("INSERT INTO family_migrations VALUES ('demo_children_v1')")
-
-    def seed_parent_folders(self):
-        with connect(self.url) as db:
-            db.execute('SELECT pg_advisory_xact_lock(72461905)')
-            if db.execute("SELECT name FROM family_migrations WHERE name='parent_folders_v1'").fetchone():
-                return
-            for name in ['Profile','Health','Documents','Activities']:
-                db.execute("INSERT INTO family_nodes(id,family_id,child_id,name,kind) VALUES (?,'sarah-family','parent',?,'folder') ON CONFLICT DO NOTHING",(str(uuid4()),name))
-            db.execute("INSERT INTO family_migrations VALUES ('parent_folders_v1')")
-
-    def register(self, name, email, password_hash):
-        family_id, account_id = str(uuid4()), str(uuid4())
-        with connect(self.url) as db:
-            db.execute('INSERT INTO families(id,name) VALUES (?,?)', (family_id,name))
+            if db.execute('SELECT id FROM families WHERE id=?', (family_id,)).fetchone() is None:
+                db.execute('INSERT INTO families(id,name) VALUES (?,?)', (family_id,name))
             db.execute('INSERT INTO accounts(id,family_id,email,name,password_hash) VALUES (?,?,?,?,?)', (account_id,family_id,email,name,password_hash))
         return family_id
 
@@ -105,21 +87,32 @@ class FamilyStore:
 
     def profile(self, family_id):
         with connect(self.url) as db:
-            row = db.execute('SELECT id,name,email FROM accounts WHERE family_id=? ORDER BY created_at LIMIT 1', (family_id,)).fetchone()
-        return row or {'id': 'sarah', 'name': 'Sarah', 'email': 'demo@mom.life'}
+            return db.execute('SELECT id,name,email,photo_version,photo IS NOT NULL AS has_photo FROM accounts WHERE family_id=? ORDER BY created_at LIMIT 1', (family_id,)).fetchone()
 
     def snapshot(self, family_id):
         with connect(self.url) as db:
             with batch(db):
-                parent_cursor = db.execute('SELECT id,name,email FROM accounts WHERE family_id=? ORDER BY created_at LIMIT 1', (family_id,))
+                parent_cursor = db.execute('SELECT id,name,email,photo_version,photo IS NOT NULL AS has_photo FROM accounts WHERE family_id=? ORDER BY created_at LIMIT 1', (family_id,))
                 children_cursor = db.execute('SELECT id,name,birth_date,avatar_seed,photo_version,email_updates,text_updates,notifications,photo IS NOT NULL AS has_photo FROM children WHERE family_id=? ORDER BY created_at,id', (family_id,))
             parent = parent_cursor.fetchone()
             children = children_cursor.fetchall()
-        return parent or {'id': 'sarah', 'name': 'Sarah', 'email': 'demo@mom.life'}, children
+        return parent, children
 
     def child(self, family_id, identity):
         with connect(self.url) as db:
             return db.execute('SELECT * FROM children WHERE family_id=? AND id=?', (family_id,identity)).fetchone()
+
+    def parent_photo(self, family_id):
+        with connect(self.url) as db:
+            return db.execute('SELECT photo,photo_type FROM accounts WHERE family_id=? ORDER BY created_at LIMIT 1', (family_id,)).fetchone()
+
+    def update_parent_photo(self, family_id, photo, photo_type):
+        with connect(self.url) as db:
+            return db.execute('UPDATE accounts SET photo=?,photo_type=?,photo_version=photo_version+1 WHERE family_id=?', (photo,photo_type,family_id)).rowcount > 0
+
+    def update_parent(self, family_id, name, email):
+        with connect(self.url) as db:
+            return db.execute('UPDATE accounts SET name=?,email=? WHERE family_id=?', (name,email,family_id)).rowcount > 0
 
     def update_child(self, family_id, identity, values):
         allowed = {'name','birth_date','email_updates','text_updates','notifications','photo','photo_type'}

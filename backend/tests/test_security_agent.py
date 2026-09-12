@@ -8,6 +8,10 @@ from app.task_store import TaskStore
 
 
 class Families:
+    @classmethod
+    def snapshot(cls, family_id):
+        return cls.profile(family_id), cls.list_children(family_id)
+
     @staticmethod
     def list_children(family_id):
         return [{"id": "child", "family_id": family_id, "name": "Noah", "notifications": True}]

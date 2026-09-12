@@ -1,9 +1,8 @@
 from fastapi import APIRouter, HTTPException, Request
-from app.chat_store import ChatStore
-from app.config import get_settings
+from app.chat_sessions import ChatSessions
 
 router = APIRouter(prefix='/api/chats')
-chats = ChatStore(get_settings().database_url)
+chats = ChatSessions()
 
 
 @router.get('')

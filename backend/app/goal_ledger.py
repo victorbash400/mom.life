@@ -128,12 +128,3 @@ class GoalLedger:
                     db.execute("UPDATE goal_assignments SET status='queued',phase='queued' WHERE status='running' AND goal_id=?", (identity,))
             finally:
                 release(lease)
-
-    def family_context(self, family_id):
-        with self._connect() as db:
-            row = db.execute('SELECT payload FROM family_context WHERE family_id=?',(family_id,)).fetchone()
-            return json.loads(row['payload']) if row else {"family_id":family_id,"note":"No family profile has been supplied. Ask Mom for missing facts."}
-
-    def save_family_context(self, family_id, payload):
-        with self._connect() as db:
-            db.execute('INSERT INTO family_context VALUES (?,?) ON CONFLICT (family_id) DO UPDATE SET payload=excluded.payload',(family_id,json.dumps(payload)))

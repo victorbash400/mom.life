@@ -2,7 +2,7 @@ import asyncio
 from datetime import date
 from uuid import uuid4
 
-from fastapi import APIRouter, HTTPException, Request
+from fastapi import APIRouter, BackgroundTasks, HTTPException, Request
 from pydantic import BaseModel, Field
 
 from app.simulator import SimulatorService
@@ -54,7 +54,7 @@ def disconnect(plugin_id: str, request: Request):
 
 
 @router.post("/whatsapp/messages", status_code=201)
-async def send_message(body: SimulatedMessage, request: Request):
+async def send_message(body: SimulatedMessage, request: Request, background_tasks: BackgroundTasks):
     from app.auth import families
     from app.main import education_agent, family_events, goal_tasks, intake_agent, security_agent, task_store
     family_id = request.state.family_id
@@ -68,6 +68,11 @@ async def send_message(body: SimulatedMessage, request: Request):
             f"{profile['name']} (Simulator)", body.text.strip(), event_id, payload)
     except ValueError as error:
         raise HTTPException(409, str(error)) from error
+    background_tasks.add_task(_route_message, family_id, routed, intake_agent, security_agent, education_agent, goal_tasks, family_events)
+    return {"status": "received", "event_id": event_id, "message": routed.get("message")}
+
+
+async def _route_message(family_id, routed, intake_agent, security_agent, education_agent, goal_tasks, family_events):
     if routed["created"]:
         await intake_agent.start(family_id, str(routed["incoming_id"]), known_runnable=True)
         await security_agent.start(family_id, str(routed["security_id"]), known_runnable=True)
@@ -75,7 +80,6 @@ async def send_message(body: SimulatedMessage, request: Request):
     for goal_id in routed["goal_ids"]:
         await goal_tasks.start(family_id, goal_id)
         family_events.publish(family_id, {"type": "goals_changed", "goal_id": goal_id})
-    return {"status": "received", "event_id": event_id}
 
 
 @router.put("/health")

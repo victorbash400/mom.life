@@ -1,6 +1,6 @@
 import asyncio
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Request
 import httpx
 from pydantic import BaseModel, Field
 
@@ -15,10 +15,10 @@ class Callback(BaseModel):
 
 
 @router.post('/api/plugins/{plugin_id}/authorize')
-async def authorize(plugin_id: str,family_id: str):
+async def authorize(plugin_id: str, request: Request):
     from app.main import task_store
     try:
-        return await OAuthConnections(task_store).begin(family_id,plugin_id)
+        return await OAuthConnections(task_store).begin(request.state.family_id,plugin_id)
     except (ValueError,httpx.HTTPError) as error:
         raise HTTPException(400,str(error)) from error
 

@@ -19,7 +19,11 @@ class TaskStore(GoalLedger):
     def __init__(self, path: Path) -> None:
         self.database = path
         self.path = path if isinstance(path, Path) else Path(__file__).resolve().parents[1] / "data" / "postgres"
-        self.path.parent.mkdir(parents=True, exist_ok=True)
+        if isinstance(path, Path):
+            self.path.parent.mkdir(parents=True, exist_ok=True)
+            self.initialize()
+
+    def initialize(self) -> None:
         with self._connect() as connection:
             connection.executescript("""
                 CREATE TABLE IF NOT EXISTS family_tasks (
@@ -53,6 +57,10 @@ class TaskStore(GoalLedger):
                 CREATE TABLE IF NOT EXISTS plugin_permissions (
                     family_id TEXT NOT NULL, plugin_id TEXT NOT NULL, permission_id TEXT NOT NULL,
                     enabled INTEGER NOT NULL, PRIMARY KEY(family_id, plugin_id, permission_id)
+                );
+                CREATE TABLE IF NOT EXISTS profile_plugin_access (
+                    family_id TEXT NOT NULL, profile_id TEXT NOT NULL, plugin_id TEXT NOT NULL,
+                    enabled INTEGER NOT NULL, PRIMARY KEY(family_id, profile_id, plugin_id)
                 );
                 CREATE TABLE IF NOT EXISTS family_skills (
                     id TEXT PRIMARY KEY, family_id TEXT NOT NULL, slug TEXT NOT NULL,
@@ -123,7 +131,6 @@ class TaskStore(GoalLedger):
                 );
             """)
             connection.executescript("""
-                CREATE TABLE IF NOT EXISTS family_context (family_id TEXT PRIMARY KEY, payload TEXT NOT NULL);
                 CREATE TABLE IF NOT EXISTS goal_questions (
                     id TEXT PRIMARY KEY, goal_id TEXT NOT NULL REFERENCES family_tasks(id) ON DELETE CASCADE,
                     assignment_id TEXT NOT NULL REFERENCES goal_assignments(id) ON DELETE CASCADE,
@@ -157,6 +164,27 @@ class TaskStore(GoalLedger):
                 CREATE TABLE IF NOT EXISTS simulator_actions (
                     id TEXT PRIMARY KEY, family_id TEXT NOT NULL, plugin_id TEXT NOT NULL,
                     action TEXT NOT NULL, detail TEXT NOT NULL DEFAULT '{}', created_at TEXT NOT NULL
+                );
+                CREATE TABLE IF NOT EXISTS oauth_attempts (
+                    state TEXT PRIMARY KEY, family_id TEXT NOT NULL, plugin_id TEXT NOT NULL,
+                    verifier TEXT NOT NULL, config TEXT NOT NULL, expires_at REAL NOT NULL
+                );
+                CREATE TABLE IF NOT EXISTS oauth_tokens (
+                    family_id TEXT NOT NULL, plugin_id TEXT NOT NULL, token TEXT NOT NULL,
+                    PRIMARY KEY(family_id,plugin_id)
+                );
+                CREATE TABLE IF NOT EXISTS oauth_clients (
+                    plugin_id TEXT PRIMARY KEY, config TEXT NOT NULL
+                );
+                CREATE TABLE IF NOT EXISTS apple_health_samples (
+                    family_id TEXT NOT NULL, external_id TEXT NOT NULL, child_id TEXT NOT NULL,
+                    sample_type TEXT NOT NULL, start_at TEXT NOT NULL, end_at TEXT NOT NULL,
+                    value REAL NOT NULL, unit TEXT NOT NULL, source TEXT NOT NULL, updated_at TEXT NOT NULL,
+                    PRIMARY KEY (family_id, external_id)
+                );
+                CREATE TABLE IF NOT EXISTS browser_sessions (
+                    assignment_id TEXT PRIMARY KEY REFERENCES goal_assignments(id) ON DELETE CASCADE,
+                    session_id TEXT NOT NULL, expires_at REAL NOT NULL
                 );
             """)
             self._migrate_tasks(connection)
@@ -616,6 +644,7 @@ class TaskStore(GoalLedger):
             connection.execute("DELETE FROM plugin_connections WHERE family_id=? AND plugin_id=?", (family_id, plugin_id))
             connection.execute("DELETE FROM simulator_connections WHERE family_id=? AND plugin_id=?", (family_id, plugin_id))
             connection.execute("DELETE FROM plugin_permissions WHERE family_id=? AND plugin_id=?", (family_id, plugin_id))
+            connection.execute("DELETE FROM profile_plugin_access WHERE family_id=? AND plugin_id=?", (family_id, plugin_id))
 
     def installed_plugins(self, family_id: str) -> set[str]:
         with self._connect() as connection:
@@ -628,6 +657,72 @@ class TaskStore(GoalLedger):
     def permissions(self, family_id: str, plugin_id: str) -> dict[str, bool]:
         with self._connect() as connection:
             return {row[0]: bool(row[1]) for row in connection.execute("SELECT permission_id,enabled FROM plugin_permissions WHERE family_id=? AND plugin_id=?", (family_id, plugin_id))}
+
+    def profile_plugin_access(self, family_id: str) -> tuple[list[str], dict[tuple[str, str], bool]]:
+        with self._connect() as connection:
+            with batch(connection):
+                plugins_cursor = connection.execute(
+                    """SELECT installation.plugin_id FROM plugin_installations installation
+                    WHERE installation.family_id=? AND (
+                        EXISTS (SELECT 1 FROM plugin_connections connection WHERE connection.family_id=installation.family_id AND connection.plugin_id=installation.plugin_id)
+                        OR EXISTS (SELECT 1 FROM simulator_connections simulation WHERE simulation.family_id=installation.family_id AND simulation.plugin_id=installation.plugin_id)
+                    ) ORDER BY installation.installed_at""",
+                    (family_id,),
+                )
+                access_cursor = connection.execute(
+                    "SELECT profile_id,plugin_id,enabled FROM profile_plugin_access WHERE family_id=?",
+                    (family_id,),
+                )
+            plugin_ids = [row[0] for row in plugins_cursor]
+            access = {(row[0],row[1]): bool(row[2]) for row in access_cursor}
+        return plugin_ids, access
+
+    def set_profile_plugin_access(self, family_id: str, profile_id: str, plugin_id: str, enabled: bool) -> bool:
+        with self._connect() as connection:
+            result = connection.execute(
+                """INSERT INTO profile_plugin_access(family_id,profile_id,plugin_id,enabled)
+                SELECT ?,?,?,? WHERE EXISTS (
+                    SELECT 1 FROM plugin_installations installation WHERE installation.family_id=? AND installation.plugin_id=? AND (
+                        EXISTS (SELECT 1 FROM plugin_connections connection WHERE connection.family_id=installation.family_id AND connection.plugin_id=installation.plugin_id)
+                        OR EXISTS (SELECT 1 FROM simulator_connections simulation WHERE simulation.family_id=installation.family_id AND simulation.plugin_id=installation.plugin_id)
+                    )
+                )
+                ON CONFLICT (family_id,profile_id,plugin_id) DO UPDATE SET enabled=excluded.enabled""",
+                (family_id,profile_id,plugin_id,int(enabled),family_id,plugin_id),
+            )
+            return result.rowcount > 0
+
+    def remove_profile_plugin_access(self, family_id: str, profile_id: str) -> None:
+        with self._connect() as connection:
+            connection.execute("DELETE FROM profile_plugin_access WHERE family_id=? AND profile_id=?", (family_id,profile_id))
+
+    def runtime_plugin_access(self, family_id: str, plugin_id: str, profile_id: str = "") -> dict[str, object]:
+        with self._connect() as connection:
+            with batch(connection):
+                installed_cursor = connection.execute(
+                    "SELECT 1 AS installed FROM plugin_installations WHERE family_id=? AND plugin_id=?",
+                    (family_id,plugin_id),
+                )
+                simulated_cursor = connection.execute(
+                    "SELECT 1 AS simulated FROM simulator_connections WHERE family_id=? AND plugin_id=?",
+                    (family_id,plugin_id),
+                )
+                permissions_cursor = connection.execute(
+                    "SELECT permission_id,enabled FROM plugin_permissions WHERE family_id=? AND plugin_id=?",
+                    (family_id,plugin_id),
+                )
+                access_profile = 'parent' if profile_id == 'all' else profile_id
+                profile_cursor = connection.execute(
+                    "SELECT enabled FROM profile_plugin_access WHERE family_id=? AND profile_id=? AND plugin_id=?",
+                    (family_id,access_profile,plugin_id),
+                ) if profile_id else None
+            profile = profile_cursor.fetchone() if profile_cursor else None
+            return {
+                "installed": installed_cursor.fetchone() is not None,
+                "simulated": simulated_cursor.fetchone() is not None,
+                "enabled": bool(profile[0]) if profile else True,
+                "permissions": {row[0]: bool(row[1]) for row in permissions_cursor},
+            }
 
     def simulator_plugins(self, family_id: str) -> set[str]:
         with self._connect() as connection:
@@ -663,6 +758,7 @@ class TaskStore(GoalLedger):
         """Persist one simulated provider event, message, and its review jobs atomically."""
         timestamp = now()
         message_id = str(uuid4())
+        message = {"id": message_id, "family_id": family_id, "profile_id": profile_id, "direction": "incoming", "body": body, "provider_event_id": event_id, "created_at": timestamp}
         with self._connect() as connection:
             connection.execute("BEGIN IMMEDIATE")
             connected = connection.execute(
@@ -697,7 +793,7 @@ class TaskStore(GoalLedger):
             connection.execute("INSERT INTO simulator_messages VALUES (?,?,?,?,?,?,?)",
                 (message_id, family_id, profile_id, "incoming", body, event_id, timestamp))
             if waits:
-                return {"created": False, "duplicate": False, "matched": True, "goal_ids": list(dict.fromkeys(goal_ids))}
+                return {"created": False, "duplicate": False, "matched": True, "goal_ids": list(dict.fromkeys(goal_ids)), "message": message}
             replay = connection.execute(
                 """SELECT id FROM incoming_items
                 WHERE family_id=? AND source='whatsapp' AND correlation=? AND sender=? AND subject='' AND content=? AND created_at>=?
@@ -705,7 +801,7 @@ class TaskStore(GoalLedger):
                 (family_id, f"sim:{profile_id}", sender, body, (datetime.now(UTC) - timedelta(minutes=5)).isoformat()),
             ).fetchone()
             if replay:
-                return {"created": False, "duplicate": False, "matched": False, "goal_ids": [], "incoming_id": replay["id"]}
+                return {"created": False, "duplicate": False, "matched": False, "goal_ids": [], "incoming_id": replay["id"], "message": message}
             incoming_id = str(uuid4())
             connection.execute(
                 """INSERT INTO incoming_items
@@ -723,7 +819,7 @@ class TaskStore(GoalLedger):
             education_id = str(uuid4())
             connection.execute("INSERT INTO education_reviews (id,family_id,incoming_id,status,created_at) VALUES (?,?,?,'queued',?)",
                 (education_id, family_id, incoming_id, timestamp))
-            return {"created": True, "duplicate": False, "matched": False, "goal_ids": [],
+            return {"created": True, "duplicate": False, "matched": False, "goal_ids": [], "message": message,
                 "incoming_id": incoming_id, "security_id": security_id, "education_id": education_id}
 
     def simulator_messages(self, family_id: str, limit: int = 80) -> list[dict[str, object]]:

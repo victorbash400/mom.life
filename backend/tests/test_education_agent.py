@@ -98,7 +98,7 @@ def test_education_agent_exposes_connected_provider_read_tools(tmp_path, monkeyp
             assert context["connected_sources"] == ["google-classroom"]
             directory = await self.tools["list_education_source_tools"]("google-classroom")
             assert [item["name"] for item in directory] == ["list_courses"]
-            result = await self.tools["read_education_source"]("google-classroom", "list_courses", {})
+            result = await self.tools["read_education_source"]("child", "google-classroom", "list_courses", {})
             assert result["courses"][0]["name"] == "Reading"
             await self.tools["complete_education_review"]("The source did not identify a known child.")
 

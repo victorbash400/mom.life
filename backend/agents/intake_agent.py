@@ -34,13 +34,14 @@ async def run_intake_agent(store: TaskStore, family_id: str, incoming_id: str, s
         if not item:
             raise ValueError("The incoming item is unavailable.")
         from app.auth import families
-        children = json.loads(json.dumps([dict(child) for child in families.list_children(family_id)], default=str))
-        parent = json.loads(json.dumps(dict(families.profile(family_id)), default=str))
+        parent, children = families.snapshot(family_id)
+        children = json.loads(json.dumps([dict(child) for child in children], default=str))
+        parent = json.loads(json.dumps(dict(parent), default=str))
         goals = store.list(family_id)
         return {
             "incoming": {key: value for key, value in item.items() if key != "activities"},
             "prior_intake_activity": item["activities"],
-            "family": {"parent": parent, "children": children, "context": store.family_context(family_id), "intake_memory": store.intake_memory(family_id)},
+            "family": {"parent": parent, "children": children, "intake_memory": store.intake_memory(family_id)},
             "goals": [
                 {
                     "id": goal["id"],

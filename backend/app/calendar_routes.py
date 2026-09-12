@@ -1,4 +1,4 @@
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Request
 
 from app.schemas import CalendarPreferencesWrite
 from plugins.google_workspace_adapter import GoogleWorkspaceAdapter
@@ -15,7 +15,8 @@ def services():
 
 
 @router.get('/api/calendar')
-async def calendar(family_id: str):
+async def calendar(request: Request):
+    family_id = request.state.family_id
     store = services()
     preferences = store.calendar_preferences(family_id)
     if 'google-workspace' not in store.installed_plugins(family_id):
@@ -48,5 +49,5 @@ async def calendar(family_id: str):
 
 
 @router.patch('/api/calendar/preferences')
-def update_preferences(body: CalendarPreferencesWrite, family_id: str):
-    return services().save_calendar_preferences(family_id, body.enabled, body.reminder_method, body.reminder_minutes)
+def update_preferences(body: CalendarPreferencesWrite, request: Request):
+    return services().save_calendar_preferences(request.state.family_id, body.enabled, body.reminder_method, body.reminder_minutes)

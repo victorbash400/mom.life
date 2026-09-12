@@ -1,12 +1,10 @@
 "use client";
-import { useFamily } from "../components/FamilyProvider";
 import { useEffect, useRef, useState } from "react";
 import { subscribeFamilyEvents } from "../lib/familyEvents";
 import type { FamilyTask } from "../types/goals";
 export type { FamilyTask } from "../types/goals";
 
 export function useFamilyTasks() {
-  const { family } = useFamily();
   const revisionRef = useRef(0);
   const connectedOnce = useRef(false);
   const [tasks, setTasks] = useState<FamilyTask[]>([]);
@@ -37,7 +35,7 @@ export function useFamilyTasks() {
     return () => { active = false; unsubscribe(); };
   }, []);
   function accept(task: FamilyTask) { revisionRef.current++; setTasks((current) => [task, ...current.filter((item) => item.id !== task.id)]); }
-  async function createTask(childId: string, text: string) { accept(await requestTask("/api/tasks", "POST", { family_id: family.id, child_id: childId, text })); }
+  async function createTask(childId: string, text: string) { accept(await requestTask("/api/tasks", "POST", { child_id: childId, text })); }
   async function setTaskStatus(id: string, status: FamilyTask["status"]) { accept(await requestTask(`/api/tasks/${id}`, "PATCH", { status })); }
   async function deleteTask(id: string) { await requestTask(`/api/tasks/${id}`, "DELETE"); revisionRef.current++; setTasks((current) => current.filter((item) => item.id !== id)); }
   async function reviseTask(id: string, instruction: string) { accept(await requestTask(`/api/tasks/${id}/revise`, "POST", { instruction })); }

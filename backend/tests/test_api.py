@@ -43,13 +43,13 @@ def test_chat_stream_returns_sse(monkeypatch, tmp_path) -> None:
         yield 'data: {"type": "done"}\n\n'
 
     from app import chat_routes
-    from app.chat_store import ChatStore
-    monkeypatch.setattr(chat_routes, "chats", ChatStore(tmp_path / "chats.sqlite3"))
+    from app.chat_sessions import ChatSessions
+    monkeypatch.setattr(chat_routes, "chats", ChatSessions(tmp_path / "sessions"))
     chat = client.post("/api/chats").json()
     monkeypatch.setattr(main, "stream_agent_events", fake_stream)
     response = client.post(
         "/api/chat/stream",
-        json={"family_id": "family-1", "chat_id": chat["id"], "message": "Hello"},
+        json={"chat_id": chat["id"], "message": "Hello"},
     )
     assert response.status_code == 200
     assert response.headers["content-type"].startswith("text/event-stream")
@@ -63,12 +63,12 @@ def test_tasks_are_persisted_and_mutable(tmp_path, monkeypatch) -> None:
     from unittest.mock import AsyncMock
     monkeypatch.setattr(main, "task_store", TaskStore(tmp_path / "tasks.sqlite3"))
     monkeypatch.setattr(main, "goal_tasks", AsyncMock())
-    created = client.post("/api/tasks", json={"family_id": "family-1", "child_id": "all", "text": "Book appointment"})
+    created = client.post("/api/tasks", json={"child_id": "all", "text": "Book appointment"})
     assert created.status_code == 201
     task = created.json()
     assert task["status"] == "active"
-    assert client.get("/api/tasks?family_id=family-1").json() == [task]
-    paused = client.patch(f"/api/tasks/{task['id']}?family_id=family-1", json={"status": "paused"})
+    assert client.get("/api/tasks").json() == [task]
+    paused = client.patch(f"/api/tasks/{task['id']}", json={"status": "paused"})
     assert paused.json()["status"] == "paused"
-    assert client.delete(f"/api/tasks/{task['id']}?family_id=family-1").status_code == 204
-    assert client.get("/api/tasks?family_id=family-1").json() == []
+    assert client.delete(f"/api/tasks/{task['id']}").status_code == 204
+    assert client.get("/api/tasks").json() == []

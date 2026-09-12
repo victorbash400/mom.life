@@ -184,7 +184,6 @@ class GoalTaskManager:
             "permitted_namespaces": namespaces(plugin_ids),
             "mom_answers": self.store.questions(str(goal["id"])),
             "previous_run_evidence": self.store.get(family_id,str(goal["id"]))["activities"],
-            "family_context": self.store.family_context(family_id),
             "calendar_preferences": self.store.calendar_preferences(family_id),
         })
         self.store.set_assignment(str(assignment["id"]), status="running", phase="working", started_at=datetime.now(UTC).isoformat())
@@ -197,7 +196,7 @@ class GoalTaskManager:
             self.store.add_activity(str(goal["id"]), "worker_update", message, {"assignment_id": assignment["id"], "next_step": next_step})
             self._publish(family_id, str(goal["id"]))
 
-        plugins = PluginToolSession(plugin_ids,self.store,family_id)
+        plugins = PluginToolSession(plugin_ids,self.store,family_id,str(goal["child_id"]))
         plugins.assignment_id = str(assignment["id"])
         try:
             result = await run_worker(prompt,plugins,progress,list(assignment["expected_outputs"]),self.store,str(goal["id"]),str(assignment["id"]))

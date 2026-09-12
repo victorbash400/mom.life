@@ -22,10 +22,11 @@ TOOL_PERMISSION_IDS = {
 class PluginToolSession:
     """Load only permitted namespaces and retain their connections for one run."""
 
-    def __init__(self, plugin_ids: list[str], store=None, family_id: str = '') -> None:
+    def __init__(self, plugin_ids: list[str], store=None, family_id: str = '', profile_id: str = '') -> None:
         self.plugin_ids = list(dict.fromkeys(namespaces(plugin_ids)))
         self.store = store
         self.family_id = family_id
+        self.profile_id = profile_id
         self.stack = ExitStack()
         self.assignment_id = None
         self.preserve_browser = False
@@ -38,11 +39,11 @@ class PluginToolSession:
     async def load(self, plugin_id: str) -> list[dict[str, Any]]:
         if plugin_id not in self.plugin_ids:
             raise ValueError('This namespace is not permitted for the assignment.')
-        self.require_access(plugin_id)
+        access = self.require_access(plugin_id)
         if plugin_id in self.loaded:
             return self.loaded[plugin_id]
         plugin = plugin_by_id(owner(plugin_id))
-        simulated = bool(self.store and owner(plugin_id) in self.store.simulator_plugins(self.family_id))
+        simulated = bool(access.get('simulated'))
         if simulated:
             if owner(plugin_id) == 'apple-health':
                 from plugins.apple_health_adapter import AppleHealthAdapter
@@ -75,7 +76,7 @@ class PluginToolSession:
             from plugins.api_adapters import ApiAdapter
             adapter = ApiAdapter(plugin_id, self.family_id, token=await self.oauth_token(plugin_id))
             self.clients[plugin_id] = adapter
-            permissions = self.store.permissions(self.family_id, plugin_id) if self.store else {}
+            permissions = access.get('permissions', {})
             permission_ids = TOOL_PERMISSION_IDS.get(plugin_id, {})
             self.loaded[plugin_id] = [
                 tool for tool in adapter.directory()
@@ -121,20 +122,25 @@ class PluginToolSession:
         namespace = plugin_id
         plugin_id = owner(namespace)
         if self.store:
-            if plugin_id not in self.store.installed_plugins(self.family_id):
+            access = self.store.runtime_plugin_access(self.family_id,plugin_id,self.profile_id)
+            if not access['installed']:
                 raise RuntimeError('The plugin has been removed from this family.')
-            permissions = self.store.permissions(self.family_id, plugin_id)
+            if not access['enabled']:
+                raise RuntimeError("This source is turned off for this profile. Use another enabled source or continue without it.")
+            permissions = access['permissions']
             if namespace in WORKSPACE_PERMISSION_IDS:
                 if not permissions.get(WORKSPACE_PERMISSION_IDS[namespace], True):
                     raise RuntimeError('This Google Workspace service is disabled for the family.')
-                return
+                return access
             if plugin_id in TOOL_PERMISSION_IDS:
                 if not any(permissions.get(permission_id, True) for permission_id in TOOL_PERMISSION_IDS[plugin_id].values()):
                     raise RuntimeError(f'{plugin_by_id(plugin_id).name} has no enabled permissions.')
-                return
+                return access
             # Coarse provider permissions cannot safely classify arbitrary MCP methods.
             if not all(permissions.get(f'{plugin_id}.{i}', True) for i in range(len(plugin_by_id(plugin_id).permissions))):
                 raise RuntimeError('This plugin has disabled permissions. Enable the required permissions before running it.')
+            return access
+        return {'simulated':False}
 
     async def call(self, plugin_id, name, arguments, call_id):
         self.require_access(plugin_id)

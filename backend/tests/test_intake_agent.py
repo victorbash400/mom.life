@@ -8,6 +8,10 @@ from app.task_store import TaskStore
 
 
 class Families:
+    @classmethod
+    def snapshot(cls, family_id):
+        return cls.profile(family_id), cls.list_children(family_id)
+
     @staticmethod
     def list_children(family_id):
         return [{"id": "child", "family_id": family_id, "name": "Noah"}]
@@ -61,7 +65,10 @@ def test_simulator_ingest_persists_one_review_bundle_for_replay(tmp_path):
     first = store.receive_simulator_incoming("family", "parent", "Sarah (Simulator)", "Same update", "event-1", payload)
     replay = store.receive_simulator_incoming("family", "parent", "Sarah (Simulator)", "Same update", "event-2", payload)
     assert first["created"] is True
-    assert replay == {"created": False, "duplicate": False, "matched": False, "goal_ids": [], "incoming_id": first["incoming_id"]}
+    assert {key: replay[key] for key in ("created", "duplicate", "matched", "goal_ids", "incoming_id")} == {
+        "created": False, "duplicate": False, "matched": False, "goal_ids": [], "incoming_id": first["incoming_id"],
+    }
+    assert replay["message"]["body"] == "Same update"
     assert len(store.incoming_items("family")) == 1
     assert len(store.security_reviews("family")) == 1
     with store._connect() as connection:

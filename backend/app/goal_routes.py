@@ -1,4 +1,4 @@
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Request
 
 from app.schemas import GoalRevision, QuestionAnswer, SkillWrite
 from app.event_stream import family_events
@@ -14,7 +14,8 @@ def services():
 
 
 @router.post('/api/tasks/{goal_id}/revise')
-async def revise(goal_id: str, body: GoalRevision, family_id: str):
+async def revise(goal_id: str, body: GoalRevision, request: Request):
+    family_id = request.state.family_id
     store,manager = services()
     try:
         await manager.revise(family_id,goal_id,body.instruction)
@@ -24,7 +25,8 @@ async def revise(goal_id: str, body: GoalRevision, family_id: str):
 
 
 @router.post('/api/tasks/{goal_id}/questions/{question_id}')
-async def answer(goal_id: str, question_id: str, body: QuestionAnswer, family_id: str):
+async def answer(goal_id: str, question_id: str, body: QuestionAnswer, request: Request):
+    family_id = request.state.family_id
     store,manager = services()
     if not store.get(family_id,goal_id):
         raise HTTPException(404,'Goal not found.')
@@ -42,7 +44,8 @@ async def answer(goal_id: str, question_id: str, body: QuestionAnswer, family_id
 
 
 @router.post('/api/skills')
-def create_skill(body: SkillWrite, family_id: str):
+def create_skill(body: SkillWrite, request: Request):
+    family_id = request.state.family_id
     store,_ = services()
     try:
         for identity in body.required_plugin_ids:
@@ -54,7 +57,8 @@ def create_skill(body: SkillWrite, family_id: str):
 
 
 @router.patch('/api/skills/{skill_id}')
-def update_skill(skill_id: str, body: SkillWrite, family_id: str):
+def update_skill(skill_id: str, body: SkillWrite, request: Request):
+    family_id = request.state.family_id
     store,_ = services()
     try:
         for identity in body.required_plugin_ids:
@@ -63,10 +67,3 @@ def update_skill(skill_id: str, body: SkillWrite, family_id: str):
     except ValueError as error:
         raise HTTPException(400,str(error)) from error
     return next(s for s in store.skills(family_id) if s['id']==skill_id)
-
-
-@router.put('/api/family-context')
-def family_context(body: dict, family_id: str):
-    store,_ = services()
-    store.save_family_context(family_id,body)
-    return {'status':'saved'}

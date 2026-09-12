@@ -20,6 +20,8 @@ class SimulatorService:
     def state(self, family_id):
         if isinstance(self.store.database, Path):
             parent = self.families.profile(family_id)
+            if not parent:
+                raise ValueError("Family account not found.")
             profiles = [{"id": "parent", "name": parent["name"], "role": "adult"}]
             profiles.extend({"id": child["id"], "name": child["name"], "role": "child"} for child in self.families.list_children(family_id))
             connected = self.store.simulator_plugins(family_id)
@@ -44,7 +46,9 @@ class SimulatorService:
             connected = {row['plugin_id'] for row in connected_cursor}
             messages = messages_cursor.fetchall()
             health = health_cursor.fetchall()
-        profiles = [{"id": "parent", "name": parent["name"] if parent else "Sarah", "role": "adult"}]
+        if not parent:
+            raise ValueError("Family account not found.")
+        profiles = [{"id": "parent", "name": parent["name"], "role": "adult"}]
         profiles.extend({"id": child["id"], "name": child["name"], "role": "child"} for child in children)
         return {
             "profiles": profiles,

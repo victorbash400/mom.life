@@ -1,13 +1,11 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { useFamily } from "../components/FamilyProvider";
 import type { CalendarPreferences, CalendarState } from "../types/calendar";
 
 const initial: CalendarState = { connected: false, writable: false, events: [], preferences: { enabled: true, reminder_method: "popup", reminder_minutes: 30 } };
 
 export function useCalendar() {
-  const { family } = useFamily();
   const [state, setState] = useState(initial);
   const [loaded, setLoaded] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -35,7 +33,7 @@ export function useCalendar() {
   async function request(text: string) {
     setBusy(true);
     try {
-      const response = await fetch("/api/tasks", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ family_id: family.id, child_id: "all", text: "Calendar: " + text }) });
+      const response = await fetch("/api/tasks", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ child_id: "all", text: "Calendar: " + text }) });
       const payload = await response.json();
       if (!response.ok) throw new Error(payload.error || "Could not start this Calendar request.");
       setError(undefined); return payload.id as string;
