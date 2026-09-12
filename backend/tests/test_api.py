@@ -22,6 +22,20 @@ def test_health() -> None:
     assert response.json() == {"status": "ok"}
 
 
+def test_child_photo_reads_owned_row_once(monkeypatch):
+    from unittest.mock import Mock
+    from app import family_routes
+    lookup = Mock(return_value={'photo': b'photo-bytes', 'photo_type': 'image/jpeg'})
+    monkeypatch.setattr(family_routes.families, 'child', lookup)
+    response = client.get('/api/family/children/child/photo')
+    assert response.content == b'photo-bytes'
+    lookup.assert_called_once_with('family-1', 'child')
+    lookup.reset_mock()
+    lookup.return_value = None
+    assert client.get('/api/family/children/other/photo').status_code == 404
+    lookup.assert_called_once_with('family-1', 'other')
+
+
 def test_runtime_exposes_model_plan() -> None:
     response = client.get("/api/runtime")
     assert response.status_code == 200

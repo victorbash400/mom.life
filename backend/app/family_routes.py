@@ -112,8 +112,9 @@ async def photo(identity: str, request: Request, file: UploadFile = File()):
 
 @router.get('/children/{identity}/photo')
 def get_photo(identity: str, request: Request):
-    family = require_child(request,identity)
-    child = families.child(family,identity)
+    child = families.child(request.state.family_id,identity)
+    if not child:
+        raise HTTPException(404,'Child not found.')
     if not child['photo']:
         raise HTTPException(404,'No photo uploaded.')
     return Response(bytes(child['photo']),media_type=child['photo_type'] or 'image/jpeg')
