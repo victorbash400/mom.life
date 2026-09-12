@@ -21,6 +21,7 @@ class AssignmentPlan(BaseModel):
     required_inputs: list[str] = Field(default_factory=list)
     expected_outputs: list[str] = Field(default_factory=list)
     skill_ids: list[str] = Field(default_factory=list)
+    plugin_ids: list[str] = Field(default_factory=list)
 
 
 class GoalPlan(BaseModel):
@@ -29,12 +30,14 @@ class GoalPlan(BaseModel):
 
 PLANNER_PROMPT = """You are mom.life's goal planner. Convert one family outcome into the smallest strictly sequential assignment board needed to finish it. Workers are constructed from assignments; there are no fixed worker roles.
 
-Keep research together with the action that consumes it. Split work only when a later assignment requires a separately verifiable output from an earlier assignment. Select only listed skills whose available field is true. When connection_setup_required is nonempty, preserve the requested outcome and instruct the worker to request missing access; do not invent an alternative outcome. Never invent a plugin, fact, person, date, recipient, or identifier. Preserve the request's wording and child scope.
+Keep research together with the action that consumes it. Split work only when a later assignment requires a separately verifiable output from an earlier assignment. Select only listed skills whose available field is true. Select exact plugin_ids from available_plugins for every tool the assignment needs, including later automation actions. Respect the requested provider; never replace Fitbit with Apple Health or omit a requested messaging tool. Skills provide procedures, and plugin_ids provide tool access independently. When a required connection is unavailable, preserve the requested outcome and instruct the worker to request missing access; do not invent an alternative outcome. Never invent a plugin, fact, person, date, recipient, or identifier. Preserve the request's wording and child scope.
+
+For monitoring or delayed work, create an assignment to save the automation and any requested baseline. Put the future check and action in the automation instruction, not in another assignment that would execute immediately. Include the known baseline and exact notification condition in the saved instruction. An automation check invocation executes the current check only; it must not create another automation or schedule itself again.
 
 Every assignment needs a complete operational instruction and exact, observable expected outputs. When the request gives an exact output name, preserve that label verbatim; never expand, explain, or rename it. The user's requested outcome and constraints are the authorization for that work. Ask Mom only when a necessary choice, identity, recipient, amount, consent decision, medical judgment, or other consequential detail is genuinely missing or ambiguous. Read the existing task ledger first. Create, reuse, update, steer, retry, or cancel assignments. Preserve completed work and task identity. Retry the same failed task with a corrected instruction informed by its failure evidence. Do not create duplicate outcomes. Each create needs a unique key; dependencies reference earlier keys or existing task IDs. Keep unrelated assignments independent. Revision instructions must be complete. Return only the structured plan."""
 
 
-async def plan_goal(request: str, child_id: str, skills: list[dict[str, object]], settings: Settings | None = None, existing_tasks: list[dict] | None = None) -> GoalPlan:
+async def plan_goal(request: str, child_id: str, skills: list[dict[str, object]], settings: Settings | None = None, existing_tasks: list[dict] | None = None, plugins: list[dict] | None = None) -> GoalPlan:
     config = settings or get_settings()
     session = boto3.Session(profile_name=config.aws_profile or None, region_name=config.strands_region)
     agent = Agent(
@@ -44,7 +47,7 @@ async def plan_goal(request: str, child_id: str, skills: list[dict[str, object]]
         structured_output_model=GoalPlan,
         callback_handler=None,
     )
-    result = await invoke(agent, json.dumps({"request": request, "child_id": child_id, "available_skills": skills, "task_ledger": existing_tasks or []}), config.model_timeout_seconds)
+    result = await invoke(agent, json.dumps({"request": request, "child_id": child_id, "available_skills": skills, "available_plugins": plugins or [], "task_ledger": existing_tasks or []}), config.model_timeout_seconds)
     if not isinstance(result.structured_output, GoalPlan):
         raise RuntimeError("The goal planner did not return a valid assignment plan.")
     _preserve_requested_output_labels(request, result.structured_output)

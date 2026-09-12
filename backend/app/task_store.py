@@ -189,6 +189,12 @@ class TaskStore(GoalLedger):
                 );
             """)
             self._migrate_tasks(connection)
+            if isinstance(self.database, Path):
+                columns = {row[1] for row in connection.execute("PRAGMA table_info(goal_assignments)")}
+                if "plugin_ids" not in columns:
+                    connection.execute("ALTER TABLE goal_assignments ADD COLUMN plugin_ids TEXT NOT NULL DEFAULT '[]'")
+            else:
+                connection.execute("ALTER TABLE goal_assignments ADD COLUMN IF NOT EXISTS plugin_ids TEXT NOT NULL DEFAULT '[]'")
         from app.automation_store import AutomationStore
         AutomationStore(self).initialize()
 
@@ -253,9 +259,9 @@ class TaskStore(GoalLedger):
         for row in assignments:
             assignment = self._assignment_snapshot(row)
             assignment["skills"] = [skills[identity] for identity in assignment["skill_ids"] if identity in skills]
-            assignment["permitted_namespaces"] = namespaces(list(dict.fromkeys(
+            assignment["permitted_namespaces"] = namespaces(list(dict.fromkeys(assignment["plugin_ids"] or [
                 identity for skill in assignment["skills"] for identity in skill["required_plugin_ids"]
-            )))
+            ])))
             assignments_by_goal.setdefault(str(row["goal_id"]), []).append(assignment)
         questions_by_goal: dict[str, list[dict[str, object]]] = {}
         for row in questions:
@@ -614,11 +620,12 @@ class TaskStore(GoalLedger):
                   "status": "queued", "phase": "queued", "current_step": str(payload["title"]), "next_step": "", "progress": 0,
                   "depends_on": json.dumps(payload.get("depends_on", [])), "required_inputs": json.dumps(payload.get("required_inputs", [])),
                   "expected_outputs": json.dumps(payload.get("expected_outputs", [])), "skill_ids": json.dumps(payload.get("skill_ids", [])),
+                  "plugin_ids": json.dumps(payload.get("plugin_ids", [])),
                   "report": "", "evidence": "[]", "created_at": now(), "started_at": None, "finished_at": None}
         with self._connect() as connection:
             connection.execute("""INSERT INTO goal_assignments
-                (id,goal_id,title,instruction,status,phase,current_step,next_step,progress,depends_on,required_inputs,expected_outputs,skill_ids,report,evidence,created_at,started_at,finished_at)
-                VALUES (:id,:goal_id,:title,:instruction,:status,:phase,:current_step,:next_step,:progress,:depends_on,:required_inputs,:expected_outputs,:skill_ids,:report,:evidence,:created_at,:started_at,:finished_at)""", record)
+                (id,goal_id,title,instruction,status,phase,current_step,next_step,progress,depends_on,required_inputs,expected_outputs,skill_ids,plugin_ids,report,evidence,created_at,started_at,finished_at)
+                VALUES (:id,:goal_id,:title,:instruction,:status,:phase,:current_step,:next_step,:progress,:depends_on,:required_inputs,:expected_outputs,:skill_ids,:plugin_ids,:report,:evidence,:created_at,:started_at,:finished_at)""", record)
         return assignment_id
 
     def assignments(self, goal_id: str) -> list[dict[str, object]]:
@@ -632,7 +639,7 @@ class TaskStore(GoalLedger):
             return self._assignment_snapshot(row) if row else None
 
     def set_assignment(self, assignment_id: str, **changes: object) -> None:
-        values = {key: json.dumps(value) if key in {"evidence", "skill_ids", "depends_on", "required_inputs", "expected_outputs"} and not isinstance(value, str) else value for key, value in changes.items()}
+        values = {key: json.dumps(value) if key in {"evidence", "skill_ids", "plugin_ids", "depends_on", "required_inputs", "expected_outputs"} and not isinstance(value, str) else value for key, value in changes.items()}
         if not values:
             return
         clause = ", ".join(f"{key}=?" for key in values)
@@ -890,9 +897,9 @@ class TaskStore(GoalLedger):
         from plugins.namespaces import namespaces
         for assignment in goal["assignments"]:
             assignment["skills"] = [skills[identity] for identity in assignment["skill_ids"] if identity in skills]
-            assignment["permitted_namespaces"] = namespaces(list(dict.fromkeys(
+            assignment["permitted_namespaces"] = namespaces(list(dict.fromkeys(assignment["plugin_ids"] or [
                 identity for skill in assignment["skills"] for identity in skill["required_plugin_ids"]
-            )))
+            ])))
         goal["questions"] = [self._question_snapshot(question) for question in connection.execute("SELECT * FROM goal_questions WHERE goal_id=? ORDER BY created_at", (row["id"],))]
         goal["activities"] = [{**dict(item), "evidence": json.loads(item["evidence"])} for item in connection.execute("SELECT * FROM goal_activities WHERE goal_id=? ORDER BY created_at", (row["id"],))]
         return goal
@@ -948,7 +955,7 @@ class TaskStore(GoalLedger):
     @staticmethod
     def _assignment_snapshot(row: sqlite3.Row) -> dict[str, object]:
         item = dict(row)
-        for field in ("depends_on", "required_inputs", "expected_outputs", "skill_ids", "evidence"):
+        for field in ("depends_on", "required_inputs", "expected_outputs", "skill_ids", "plugin_ids", "evidence"):
             item[field] = json.loads(item[field] or "[]")
         return item
 

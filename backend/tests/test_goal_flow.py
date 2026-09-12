@@ -120,3 +120,34 @@ def test_planner_can_select_an_unconnected_skill_by_slug(tmp_path, monkeypatch):
     assert selected != 'school-notice-follow-through'
     assert store.assignment(assignments[0]['id'])['skill_ids'] == [selected]
     assert store.get('family', goal['id'])['plugin_ids'] == ['google-workspace']
+
+
+def test_assignment_preserves_requested_providers_without_custom_skills(tmp_path, monkeypatch):
+    from app import goal_tasks
+
+    store = TaskStore(tmp_path / 'providers.db')
+    goal = store.create('family', 'child', 'Check Fitbit and message through WhatsApp')
+    captured = {}
+
+    async def plan(*args, **kwargs):
+        captured['available'] = {item['id'] for item in kwargs['plugins']}
+        return GoalPlan(operations=[AssignmentPlan(
+            action='create', key='check', title='Check sleep and notify',
+            instruction='Read Fitbit and notify through WhatsApp if needed.',
+            plugin_ids=['fitbit', 'whatsapp'], expected_outputs=['Check receipt'],
+        )])
+
+    async def worker(prompt, plugins, *args, **kwargs):
+        captured['permitted'] = plugins.plugin_ids
+        return {'status':'completed', 'summary':'Checked', 'evidence':'Observed receipt',
+                'outputs':[{'name':'Check receipt','evidence':'Observed receipt'}]}
+
+    monkeypatch.setattr(goal_tasks, 'plan_goal', plan)
+    monkeypatch.setattr(goal_tasks, 'run_worker', worker)
+    asyncio.run(GoalTaskManager(store)._orchestrate('family', goal['id']))
+    saved = TaskStore(store.path).get('family', goal['id'])
+    assert {'fitbit', 'whatsapp'} <= captured['available']
+    assert captured['permitted'] == ['fitbit', 'whatsapp']
+    assert saved['assignments'][0]['permitted_namespaces'] == ['fitbit', 'whatsapp']
+    assert saved['assignments'][0]['plugin_ids'] == ['fitbit', 'whatsapp']
+    assert saved['status'] == 'completed'

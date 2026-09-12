@@ -30,9 +30,9 @@ class GoalLedger:
                         raise ValueError('Dependencies must refer to existing tasks or earlier create keys.')
                     task_id = str(uuid4())
                     db.execute('''INSERT INTO goal_assignments
-                        (id,goal_id,title,instruction,status,phase,current_step,depends_on,required_inputs,expected_outputs,skill_ids,created_at)
-                        VALUES (?,?,?,?,'queued','queued',?,?,?,?,?,?)''',
-                        (task_id,goal_id,op.title,op.instruction,op.title,json.dumps(deps),json.dumps(op.required_inputs),json.dumps(op.expected_outputs),json.dumps(op.skill_ids),now()))
+                        (id,goal_id,title,instruction,status,phase,current_step,depends_on,required_inputs,expected_outputs,skill_ids,plugin_ids,created_at)
+                        VALUES (?,?,?,?,'queued','queued',?,?,?,?,?,?,?)''',
+                        (task_id,goal_id,op.title,op.instruction,op.title,json.dumps(deps),json.dumps(op.required_inputs),json.dumps(op.expected_outputs),json.dumps(op.skill_ids),json.dumps(op.plugin_ids),now()))
                     rows[task_id] = {'id':task_id,'title':op.title,'status':'queued'}
                     keys[op.key] = task_id
                     continue
@@ -61,8 +61,8 @@ class GoalLedger:
                 if 'depends_on' in op.model_fields_set:
                     deps = [keys.get(identity, identity) for identity in op.depends_on]
                     db.execute('UPDATE goal_assignments SET depends_on=? WHERE id=?',(json.dumps(deps),op.task_id))
-                for name, value in [('title',op.title),('expected_outputs',op.expected_outputs),('required_inputs',op.required_inputs),('skill_ids',op.skill_ids)]:
-                    if value or name in {'required_inputs','skill_ids'} and name in op.model_fields_set:
+                for name, value in [('title',op.title),('expected_outputs',op.expected_outputs),('required_inputs',op.required_inputs),('skill_ids',op.skill_ids),('plugin_ids',op.plugin_ids)]:
+                    if value or name in {'required_inputs','skill_ids','plugin_ids'} and name in op.model_fields_set:
                         db.execute(f'UPDATE goal_assignments SET {name}=? WHERE id=?', (json.dumps(value) if isinstance(value,list) else value,op.task_id))
             from app.plan_validation import validate_dependencies
             validate_dependencies(db.execute('SELECT * FROM goal_assignments WHERE goal_id=?',(goal_id,)).fetchall())

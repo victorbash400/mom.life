@@ -167,12 +167,15 @@ class GoalTaskManager:
         ledger = self.store.assignments(str(goal["id"]))
         plan_request = request
         for attempt in range(2):
-            plan = await plan_goal(plan_request, str(goal["child_id"]), skills, existing_tasks=ledger)
+            plan = await plan_goal(plan_request, str(goal["child_id"]), skills, existing_tasks=ledger,
+                                   plugins=[{'id':p['id'],'name':p['name'],'connected':p['connected']} for p in states.values()])
             try:
                 for operation in plan.operations:
                     operation.skill_ids = _resolve_skill_ids(operation.skill_ids, skills)
                     if any(identity not in valid or not valid[identity]["available"] for identity in operation.skill_ids):
                         raise ValueError("The planner selected an unknown or unavailable skill.")
+                    if any(identity not in states for identity in operation.plugin_ids):
+                        raise ValueError("The planner selected an unknown plugin.")
                 self.store.apply_plan(family_id,str(goal["id"]),plan.operations)
                 break
             except ValueError as error:
@@ -181,7 +184,7 @@ class GoalTaskManager:
                 plan_request = f"{request}\n\nCorrect the plan using the existing task ledger. The prior plan was invalid: {error}"
         assignments = self.store.assignments(str(goal["id"]))
         selected = list(dict.fromkeys(identity for item in assignments if item["status"] != "cancelled" for identity in item["skill_ids"]))
-        plugins = list(dict.fromkeys(identity for skill_id in selected for identity in valid[skill_id]["required_plugin_ids"]))
+        plugins = list(dict.fromkeys(identity for item in assignments if item['status'] != 'cancelled' for identity in (item['plugin_ids'] or [p for s in item['skill_ids'] for p in valid[s]['required_plugin_ids']])))
         self.store.set_goal_state(str(goal["id"]),run_state="queued",current_step="Ready to begin",skill_ids=selected,plugin_ids=plugins)
         self.store.add_activity(str(goal["id"]),"plan_revised" if instruction else "plan_created",instruction or "Created the assignment board",plan.model_dump())
         self._publish(family_id,str(goal["id"]))
@@ -192,7 +195,7 @@ class GoalTaskManager:
         if any(skill_id not in skills for skill_id in assignment["skill_ids"]):
             raise ValueError("An assigned skill no longer exists.")
         selected = [skills[skill_id] for skill_id in assignment["skill_ids"]]
-        plugin_ids = list(dict.fromkeys(plugin_id for skill in selected for plugin_id in skill["required_plugin_ids"]))
+        plugin_ids = list(dict.fromkeys(assignment['plugin_ids'] or [plugin_id for skill in selected for plugin_id in skill["required_plugin_ids"]]))
         instructions = "\n\n".join(f"Skill: {skill['name']}\n{skill['instructions']}" for skill in selected)
         dependencies = [item for item in self.store.assignments(str(goal["id"])) if item["id"] in assignment["depends_on"]]
         handoff = [{"title": item["title"], "summary": item["report"], "evidence": item["evidence"]} for item in dependencies]
