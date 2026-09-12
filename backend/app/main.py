@@ -19,6 +19,8 @@ from plugins.catalog import PLUGINS, plugin_by_id, plugin_snapshot
 
 @asynccontextmanager
 async def lifespan(app):
+    await asyncio.to_thread(task_store.initialize)
+
     async def recover():
         await asyncio.to_thread(task_store.recover)
         automations.start_listener()
