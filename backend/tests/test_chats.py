@@ -1,5 +1,8 @@
 import asyncio
 import json
+import sqlite3
+from contextlib import contextmanager
+from uuid import uuid4
 
 import pytest
 from fastapi.testclient import TestClient
@@ -7,6 +10,26 @@ from strands.types.session import SessionAgent, SessionMessage
 
 from app import chat_routes, chat_stream, main
 from app.chat_sessions import AGENT_ID, ChatSessions
+
+
+def test_cloud_first_send_registers_chat_without_changing_ownership(tmp_path, monkeypatch):
+    database = tmp_path / "chats.db"
+    @contextmanager
+    def connect(_):
+        with sqlite3.connect(database) as db:
+            db.row_factory = sqlite3.Row
+            yield db
+    monkeypatch.setattr("app.chat_sessions.connect", connect)
+    with connect("") as db:
+        db.execute("CREATE TABLE chats(id TEXT PRIMARY KEY,family_id TEXT,title TEXT,created_at TEXT,updated_at TEXT)")
+    sessions = ChatSessions(database=str(database))
+    identity = str(uuid4())
+    assert sessions.ensure("one", identity) == identity
+    assert sessions.ensure("one", identity) == identity
+    with pytest.raises(ValueError, match="Chat not found"):
+        sessions.ensure("two", identity)
+    assert len(sessions.list("one")) == 1
+    assert sessions.list("two") == []
 
 
 @pytest.fixture

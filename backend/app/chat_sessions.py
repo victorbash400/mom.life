@@ -33,7 +33,9 @@ class ChatSessions:
     def ensure(self, family_id: str, chat_id: str):
         identity = self._identity(chat_id)
         if self.database:
+            timestamp = datetime.now().astimezone().isoformat()
             with connect(self.database) as db:
+                db.execute("INSERT INTO chats(id,family_id,title,created_at,updated_at) VALUES (?,?,?,?,?) ON CONFLICT(id) DO NOTHING", (identity, family_id, "New chat", timestamp, timestamp))
                 row = db.execute("SELECT id FROM chats WHERE id=? AND family_id=?", (identity, family_id)).fetchone()
             if not row:
                 raise ValueError("Chat not found.")

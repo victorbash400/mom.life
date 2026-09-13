@@ -16,3 +16,5 @@ backend/.venv/
 
 !docs/goal-system.md
 !docs/family-plugins.md
+.vercel
+.env*

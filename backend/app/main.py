@@ -112,7 +112,10 @@ def runtime() -> RuntimeResponse:
 def chat_stream(body: ChatRequest, request: Request) -> StreamingResponse:
     from app.chat_routes import chats
     family_id = request.state.family_id
-    chats.ensure(family_id, body.chat_id)
+    try:
+        chats.ensure(family_id, body.chat_id)
+    except ValueError as error:
+        raise HTTPException(404, str(error)) from error
     return StreamingResponse(
         stream_agent_events(family_id=family_id, chat_id=body.chat_id, message=body.message),
         media_type="text/event-stream",
