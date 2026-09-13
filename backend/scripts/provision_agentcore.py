@@ -35,6 +35,9 @@ def load_environment() -> dict[str, str]:
             values[key] = value
     if not values.get("MOM_LIFE_DATABASE_URL"):
         raise RuntimeError("backend/.env must contain MOM_LIFE_DATABASE_URL.")
+    connection_key = PROJECT / "backend" / "data" / "connection.key"
+    if connection_key.is_file():
+        values.setdefault("MOM_LIFE_CONNECTION_KEY", connection_key.read_text().strip())
     database = urlsplit(values["MOM_LIFE_DATABASE_URL"])
     query = dict(parse_qsl(database.query))
     if query.get("sslmode") in {"verify-ca", "verify-full"} and "sslrootcert" not in query:
