@@ -24,11 +24,9 @@ async def lifespan(app):
     async def recover():
         await asyncio.to_thread(task_store.recover)
         automations.start_listener()
-        await asyncio.gather(
-            security_agent.recover(),
-            education_agent.recover(),
-            intake_agent.recover(),
-        )
+        await security_agent.recover()
+        await intake_agent.recover()
+        await education_agent.recover()
 
     recovery = asyncio.create_task(recover(), name="mom-life-recovery")
     try:

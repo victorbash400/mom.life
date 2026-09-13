@@ -46,9 +46,7 @@ def test_simulated_whatsapp_reaches_the_real_intake_store(tmp_path, monkeypatch,
     families = Families()
 
     monkeypatch.setattr(main, "task_store", store)
-    monkeypatch.setattr(main, "intake_agent", SimpleNamespace(start=AsyncMock()))
-    monkeypatch.setattr(main, "security_agent", SimpleNamespace(receive=AsyncMock()))
-    monkeypatch.setattr(main, "education_agent", SimpleNamespace(start=AsyncMock()))
+    monkeypatch.setattr(main, "intake_agent", SimpleNamespace(route_received=AsyncMock()))
     monkeypatch.setattr(main, "goal_tasks", SimpleNamespace(start=lambda *_: None))
     monkeypatch.setattr(auth, "families", families)
     SimulatorService(store, families).connect("family", "whatsapp")

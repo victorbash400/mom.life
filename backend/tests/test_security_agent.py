@@ -104,12 +104,11 @@ def test_security_agent_uses_settings_and_records_one_decision(tmp_path, monkeyp
 
 def test_intake_dispatches_created_item_to_security_agent(tmp_path, monkeypatch):
     store = TaskStore(tmp_path / "dispatch.db")
-    security = AsyncMock()
-    manager = IntakeAgentManager(store, AsyncMock(), security)
-    monkeypatch.setattr(manager, "start", AsyncMock(return_value=True))
+    manager = IntakeAgentManager(store, AsyncMock())
+    monkeypatch.setattr(manager, "route_received", AsyncMock())
     item, created = asyncio.run(manager.receive("family", "upload", "file-1", content="Evidence"))
     assert created is True
-    security.receive.assert_awaited_once_with("family", item["id"])
+    manager.route_received.assert_awaited_once_with("family", item["id"])
 
 
 def test_disabled_security_monitoring_stays_quiet(tmp_path):

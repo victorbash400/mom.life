@@ -581,6 +581,14 @@ class TaskStore(GoalLedger):
         with self._connect() as connection:
             connection.execute(f"UPDATE education_reviews SET {clause} WHERE id=?", (*values.values(), review_id))
 
+    def reset_education_review(self, family_id: str, incoming_id: str) -> None:
+        with self._connect() as connection:
+            connection.execute(
+                """UPDATE education_reviews SET status='queued',action='',reason='',failure='',processed_at=NULL
+                WHERE family_id=? AND incoming_id=?""",
+                (family_id, incoming_id),
+            )
+
     def get(self, family_id: str, goal_id: str) -> dict[str, object] | None:
         with self._connect() as connection:
             row = connection.execute("SELECT * FROM family_tasks WHERE id=? AND family_id=?", (goal_id, family_id)).fetchone()

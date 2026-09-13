@@ -56,7 +56,7 @@ def disconnect(plugin_id: str, request: Request):
 @router.post("/whatsapp/messages", status_code=201)
 async def send_message(body: SimulatedMessage, request: Request, background_tasks: BackgroundTasks):
     from app.auth import families
-    from app.main import automations, education_agent, family_events, goal_tasks, intake_agent, security_agent, task_store
+    from app.main import automations, family_events, goal_tasks, intake_agent, task_store
     family_id = request.state.family_id
     profile = families.profile(family_id) if body.profile_id == "parent" else families.child(family_id, body.profile_id)
     if not profile:
@@ -69,16 +69,14 @@ async def send_message(body: SimulatedMessage, request: Request, background_task
             f"{profile['name']} (Simulator)", body.text.strip(), event_id, payload)
     except ValueError as error:
         raise HTTPException(409, str(error)) from error
-    background_tasks.add_task(_route_message, family_id, routed, intake_agent, security_agent, education_agent, goal_tasks, automations, family_events)
+    background_tasks.add_task(_route_message, family_id, routed, intake_agent, goal_tasks, automations, family_events)
     return {"status": "received", "event_id": event_id, "message": routed.get("message")}
 
 
-async def _route_message(family_id, routed, intake_agent, security_agent, education_agent, goal_tasks, automations, family_events):
+async def _route_message(family_id, routed, intake_agent, goal_tasks, automations, family_events):
     family_events.publish(family_id, {"type": "simulator_changed"})
     if routed["created"]:
-        await intake_agent.start(family_id, str(routed["incoming_id"]), known_runnable=True)
-        await security_agent.receive(family_id, str(routed["incoming_id"]))
-        await education_agent.start(family_id, str(routed["education_id"]), known_runnable=True)
+        await intake_agent.route_received(family_id, str(routed["incoming_id"]))
     for goal_id in routed["goal_ids"]:
         await goal_tasks.start(family_id, goal_id)
         family_events.publish(family_id, {"type": "goals_changed", "goal_id": goal_id})

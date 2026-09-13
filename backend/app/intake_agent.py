@@ -5,7 +5,7 @@ import logging
 from agents.intake_agent import run_intake_agent
 from app.event_stream import family_events
 from app.runtime_lock import acquire_wait, release
-from app.task_store import TaskStore
+from app.task_store import TaskStore, now
 
 
 logger = logging.getLogger(__name__)
@@ -25,7 +25,7 @@ class IntakeAgentManager:
         with self.store._connect() as connection:
             rows = connection.execute("SELECT id,family_id FROM incoming_items WHERE status IN ('queued','processing')").fetchall()
         for row in rows:
-            await self.start(str(row["family_id"]), str(row["id"]))
+            await self.route_received(str(row["family_id"]), str(row["id"]))
 
     async def receive(
         self,
@@ -36,12 +36,35 @@ class IntakeAgentManager:
     ) -> tuple[dict[str, object], bool]:
         item, created = await asyncio.to_thread(self.store.receive_incoming, family_id, source, provider_event_id, **content)
         if created:
-            await self.start(family_id, str(item["id"]), known_runnable=True)
-            if self.security_agent:
-                await self.security_agent.receive(family_id, str(item["id"]))
-            if self.education_agent:
-                await self.education_agent.receive(family_id, str(item["id"]))
+            await self.route_received(family_id, str(item["id"]))
         return item, created
+
+    async def route_received(self, family_id: str, incoming_id: str) -> None:
+        if self.security_agent:
+            review, _ = await self.security_agent.receive(family_id, incoming_id)
+            await self.security_agent.wait(str(review["id"]))
+            review = await asyncio.to_thread(self.store.security_review, str(review["id"]), family_id)
+            if not review or review["status"] != "completed" or (review["action"] == "alert" and not review["dismissed"]):
+                await self._hold_for_safety(family_id, incoming_id)
+                return
+        await self.start(family_id, incoming_id, known_runnable=True)
+        if self.education_agent:
+            await self.education_agent.receive(family_id, incoming_id)
+
+    async def _hold_for_safety(self, family_id: str, incoming_id: str) -> None:
+        reason = "Held for Safety review before updating tasks or education."
+        await asyncio.to_thread(
+            self.store.set_incoming, incoming_id, status="completed", action="request_attention",
+            reason=reason, attention_required=1, processed_at=now(),
+        )
+        await asyncio.to_thread(self.store.add_intake_activity, incoming_id, "safety_hold", reason)
+        education, _ = await asyncio.to_thread(self.store.receive_education_review, family_id, incoming_id)
+        await asyncio.to_thread(
+            self.store.set_education_review, str(education["id"]), status="completed", action="ignore",
+            reason=reason, failure="", processed_at=now(),
+        )
+        self._publish(family_id, incoming_id)
+        family_events.publish(family_id, {"type": "education_changed"})
 
     async def start(self, family_id: str, incoming_id: str, *, known_runnable: bool = False) -> bool:
         current = self._tasks.get(incoming_id)
@@ -85,7 +108,8 @@ class IntakeAgentManager:
             attention_required=0, failure="", processed_at=None)
         await asyncio.to_thread(self.store.add_intake_activity, incoming_id, "retry",
             guidance.strip() or "Retry requested.", {"guidance": guidance.strip()})
-        await self.start(family_id, incoming_id)
+        await asyncio.to_thread(self.store.reset_education_review, family_id, incoming_id)
+        await self.route_received(family_id, incoming_id)
         return await asyncio.to_thread(self.store.incoming, incoming_id, family_id) or item
 
     async def shutdown(self) -> None:

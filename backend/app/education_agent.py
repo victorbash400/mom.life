@@ -33,7 +33,7 @@ class EducationAgentManager:
 
     async def receive(self, family_id: str, incoming_id: str) -> tuple[dict[str, object], bool]:
         review, created = await asyncio.to_thread(self.store.receive_education_review, family_id, incoming_id)
-        if created:
+        if created or review["status"] in {"queued", "failed"}:
             await self.start(family_id, str(review["id"]), known_runnable=True)
         return review, created
 
@@ -89,6 +89,12 @@ class EducationAgentManager:
             await self._review(family_id, review_id)
 
     async def _review(self, family_id: str, review_id: str) -> None:
+        review = await asyncio.to_thread(self.store.education_review, review_id, family_id)
+        if not review or review["status"] == "completed":
+            return
+        item = await asyncio.to_thread(self.store.incoming, str(review["incoming_id"]), family_id)
+        if item and any(activity["kind"] == "safety_hold" for activity in item["activities"]) and item["attention_required"]:
+            return
         await asyncio.to_thread(self.store.set_education_review, review_id, status="processing", failure="")
         try:
             await run_education_agent(self.store, family_id, review_id)

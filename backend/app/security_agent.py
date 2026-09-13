@@ -106,6 +106,11 @@ class SecurityAgentManager:
             task.cancel()
             await asyncio.gather(task, return_exceptions=True)
 
+    async def wait(self, review_id: str) -> None:
+        task = self._tasks.get(review_id)
+        if task:
+            await asyncio.shield(task)
+
     async def _run(self, family_id: str, review_id: str) -> None:
         settings = await asyncio.to_thread(self.store.security_settings, family_id)
         review = await asyncio.to_thread(self.store.security_review,review_id,family_id)

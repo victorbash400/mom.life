@@ -111,13 +111,39 @@ def test_education_agent_exposes_connected_provider_read_tools(tmp_path, monkeyp
 
 def test_intake_dispatches_created_item_to_education_agent(tmp_path, monkeypatch):
     store = TaskStore(tmp_path / "dispatch.db")
+    manager = IntakeAgentManager(store, AsyncMock())
+    monkeypatch.setattr(manager, "route_received", AsyncMock())
+    item, created = asyncio.run(manager.receive("family", "upload", "file-1", content="School report"))
+    assert created is True
+    manager.route_received.assert_awaited_once_with("family", item["id"])
+
+
+def test_safety_alert_holds_intake_and_education_until_dismissed(tmp_path, monkeypatch):
+    store = TaskStore(tmp_path / "safety-gate.db")
+    incoming, _ = store.receive_incoming("family", "whatsapp", "message", content="Suspicious message")
+    review, _ = store.receive_security_review("family", incoming["id"])
+    store.set_security_review(review["id"], status="completed", action="alert", severity="high",
+                              summary="Account concern", reason="The sender requested private information.")
+
     security = AsyncMock()
+    security.receive.return_value = (review, False)
     education = AsyncMock()
     manager = IntakeAgentManager(store, AsyncMock(), security, education)
     monkeypatch.setattr(manager, "start", AsyncMock(return_value=True))
-    item, created = asyncio.run(manager.receive("family", "upload", "file-1", content="School report"))
-    assert created is True
-    education.receive.assert_awaited_once_with("family", item["id"])
+
+    asyncio.run(manager.route_received("family", incoming["id"]))
+    manager.start.assert_not_awaited()
+    education.receive.assert_not_awaited()
+    held = store.incoming(incoming["id"], "family")
+    assert held["action"] == "request_attention" and held["attention_required"]
+    with store._connect() as connection:
+        education_review = connection.execute("SELECT * FROM education_reviews WHERE incoming_id=?", (incoming["id"],)).fetchone()
+    assert education_review["action"] == "ignore"
+
+    store.dismiss_security_alert("family", review["id"])
+    asyncio.run(manager.retry("family", incoming["id"]))
+    manager.start.assert_awaited_once_with("family", incoming["id"], known_runnable=True)
+    education.receive.assert_awaited_once_with("family", incoming["id"])
 
 
 def test_education_manager_records_irrelevant_items_without_snapshot(tmp_path, monkeypatch):
