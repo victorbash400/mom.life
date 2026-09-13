@@ -5,6 +5,7 @@ from collections.abc import AsyncIterator
 from uuid import NAMESPACE_URL, uuid5
 
 import boto3
+from botocore.config import Config
 
 from app.config import Settings, get_settings
 
@@ -22,7 +23,7 @@ class AgentCoreClient:
         self.client = client or boto3.Session(
             profile_name=self.settings.aws_profile or None,
             region_name=self.settings.strands_region,
-        ).client("bedrock-agentcore")
+        ).client("bedrock-agentcore", config=Config(read_timeout=120, retries={"total_max_attempts": 1}))
 
     async def events(self, operation: str, payload: dict, *, session_id: str) -> AsyncIterator[dict]:
         response = await asyncio.to_thread(
@@ -35,21 +36,26 @@ class AgentCoreClient:
             payload=json.dumps({"operation": operation, **payload}, default=str).encode(),
         )
         body = response["response"]
-        while True:
-            line = await asyncio.to_thread(body.readline)
-            if not line:
-                break
-            if isinstance(line, bytes):
-                line = line.decode("utf-8")
-            line = line.strip()
-            if line.startswith("data:"):
-                event = json.loads(line.removeprefix("data:").strip())
-                if isinstance(event, dict):
-                    yield event
+        try:
+            while True:
+                line = await asyncio.to_thread(body.readline)
+                if not line:
+                    break
+                if isinstance(line, bytes):
+                    line = line.decode("utf-8")
+                line = line.strip()
+                if line.startswith("data:"):
+                    event = json.loads(line.removeprefix("data:").strip())
+                    if isinstance(event, dict):
+                        yield event
+        finally:
+            body.close()
 
-    async def result(self, operation: str, payload: dict, *, session_id: str) -> dict:
+    async def result(self, operation: str, payload: dict, *, session_id: str, on_event=None) -> dict:
         result = None
         async for event in self.events(operation, payload, session_id=session_id):
+            if on_event is not None:
+                on_event(event)
             if event.get("type") == "error":
                 raise RuntimeError(str(event.get("error") or "AgentCore invocation failed."))
             if event.get("type") == "result":

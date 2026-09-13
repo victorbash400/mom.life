@@ -31,6 +31,10 @@ Complete only when every expected output has evidence. Include exact expected ou
 async def run_worker(prompt, plugins, on_progress: Callable, expected_outputs, store, goal_id, assignment_id, settings: Settings | None = None):
     config = settings or get_settings()
     if config.uses_agentcore_runtime:
+        def relay_progress(event):
+            if event.get("type") == "progress":
+                family_events.publish(plugins.family_id, {"type": "goals_changed", "goal_id": goal_id})
+
         return await AgentCoreClient(config).result(
             "work",
             {
@@ -43,6 +47,7 @@ async def run_worker(prompt, plugins, on_progress: Callable, expected_outputs, s
                 "expected_outputs": expected_outputs,
             },
             session_id=runtime_session_id("work", goal_id, assignment_id),
+            on_event=relay_progress,
         )
     result = {}
     agent_ref: dict[str, Agent] = {}

@@ -1,10 +1,14 @@
 """Exercise account/child/file ownership against the configured PostgreSQL database."""
 from io import BytesIO
 from uuid import uuid4
+import os
+import pytest
 from fastapi.testclient import TestClient
 from PIL import Image
 from app import main, auth
 from app.database import connect
+
+pytestmark = pytest.mark.skipif(os.environ.get('MOM_LIFE_TEST_POSTGRES') != '1', reason='Opt-in PostgreSQL integration')
 
 
 def test_registration_children_and_folders_postgres():

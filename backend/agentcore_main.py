@@ -110,7 +110,7 @@ async def _chat(payload: dict):
         manager.close()
 
 
-async def _work(payload: dict):
+async def _work(payload: dict, on_progress=None):
     store = _store()
     family_id = _required(payload, "family_id")
     child_id = _required(payload, "child_id")
@@ -128,6 +128,8 @@ async def _work(payload: dict):
         store.set_assignment(assignment_id, current_step=message, progress=percent, next_step=next_step)
         store.set_goal_state(goal_id, current_step=message, progress=percent)
         store.add_activity(goal_id, "worker_update", message, {"assignment_id": assignment_id, "next_step": next_step})
+        if on_progress is not None:
+            on_progress({"type": "progress", "assignment_id": assignment_id})
 
     plugins = PluginToolSession(plugin_ids, store, family_id, child_id)
     plugins.assignment_id = assignment_id
@@ -180,6 +182,20 @@ async def invoke(payload: dict):
         if payload.get("operation") == "chat":
             async for event in _chat(payload):
                 yield event
+            return
+        if payload.get("operation") == "work":
+            queue = asyncio.Queue()
+            loop = asyncio.get_running_loop()
+            worker = asyncio.create_task(_work(payload, lambda event: loop.call_soon_threadsafe(queue.put_nowait, event)))
+            worker.add_done_callback(lambda done: queue.put_nowait(None))
+            try:
+                while (event := await queue.get()) is not None:
+                    yield event
+                yield {"type": "result", "result": await worker}
+            finally:
+                if not worker.done():
+                    worker.cancel()
+                await asyncio.gather(worker, return_exceptions=True)
             return
         yield {"type": "result", "result": await _result(payload)}
     except Exception as error:
