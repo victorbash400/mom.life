@@ -35,6 +35,7 @@ def main() -> None:
             dirs_exist_ok=True,
         )
     shutil.copy2(BACKEND / "agentcore_main.py", PACKAGE / "agentcore_main.py")
+    shutil.copy2(BACKEND / "certs" / "aws-rds-global-bundle.pem", PACKAGE / "aws-rds-global-bundle.pem")
     with zipfile.ZipFile(ARCHIVE, "w", zipfile.ZIP_DEFLATED) as archive:
         for path in PACKAGE.rglob("*"):
             if path.is_file() and path.name != ".lock":

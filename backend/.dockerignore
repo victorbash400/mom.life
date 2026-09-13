@@ -1,0 +1,7 @@
+.env
+.sessions
+.venv
+__pycache__
+data
+tests
+*.pyc
