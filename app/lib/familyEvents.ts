@@ -29,6 +29,7 @@ function connect() {
 export function subscribeFamilyEvents(subscriber: Subscriber) {
   subscribers.add(subscriber);
   connect();
+  if (source?.readyState === EventSource.OPEN) subscriber.onConnection(true);
   return () => {
     subscribers.delete(subscriber);
     if (subscribers.size === 0) {
