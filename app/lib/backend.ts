@@ -12,4 +12,7 @@ export async function backend(path: string, init: RequestInit = {}) {
     return new Response(response.body, { status: response.status, headers: { "Content-Type": response.headers.get("Content-Type") ?? "application/json", "Cache-Control": "no-cache", "X-Accel-Buffering": "no", ...(response.headers.get("Content-Disposition") ? { "Content-Disposition": response.headers.get("Content-Disposition")! } : {}) } });
   } catch { return Response.json({ error: "The mom.life backend is unavailable." }, { status: 503 }); }
 }
-export async function jsonRequest(request: Request, method = "POST"): Promise<RequestInit> { return { method, headers: { "Content-Type": "application/json" }, body: await request.text() }; }
+export async function jsonRequest(request: Request, method = "POST"): Promise<RequestInit> {
+  const body = await request.text();
+  return body ? { method, headers: { "Content-Type": "application/json" }, body } : { method };
+}

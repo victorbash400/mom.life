@@ -196,6 +196,8 @@ class GoalTaskManager:
         handoff = [{"title": item["title"], "summary": item["report"], "evidence": item["evidence"]} for item in dependencies]
         prompt = json.dumps({
             "goal_id": goal["id"], "child_id": goal["child_id"], "assignment_id": assignment["id"],
+            "goal_request": goal["text"],
+            "assignment_board": [{"id": item["id"], "instruction": item["instruction"], "status": item["status"]} for item in await asyncio.to_thread(self.store.assignments, str(goal["id"]))],
             "instruction": assignment["instruction"], "required_inputs": assignment["required_inputs"],
             "expected_outputs": assignment["expected_outputs"], "dependency_evidence": handoff,
             "selected_skill_instructions": instructions,

@@ -21,6 +21,8 @@ async def revise(goal_id: str, body: GoalRevision, request: Request):
         await manager.revise(family_id,goal_id,body.instruction)
     except ValueError as error:
         raise HTTPException(400,str(error)) from error
+    except RuntimeError as error:
+        raise HTTPException(503,str(error)) from error
     return store.get(family_id,goal_id)
 
 

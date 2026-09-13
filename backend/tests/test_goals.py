@@ -101,6 +101,9 @@ def test_manager_plans_runs_and_completes(board,monkeypatch):
     async def planner(*args,**kwargs):
         return GoalPlan(operations=[operation()])
     async def worker(prompt,plugins,progress,outputs,*args):
+        context = json.loads(prompt)
+        assert context['goal_request'] == store.get('family',goal)['text']
+        assert context['assignment_board'][0]['instruction'] == operation().instruction
         progress('List prepared',90,'Verify quantities')
         return {'status':'completed','summary':'Prepared','evidence':'List text','outputs':[{'name':'Supplies list','evidence':'Water, lunch'}]}
     monkeypatch.setattr(goal_tasks,'plan_goal',planner)
@@ -251,6 +254,20 @@ def test_api_rejects_other_family_and_manual_completion(board,monkeypatch,auth_h
     assert client.patch(f'/api/tasks/{goal}?family_id=other',json={'status':'paused'}).status_code==403
     assert client.delete(f'/api/tasks/{goal}?family_id=other').status_code==403
     assert client.patch(f'/api/tasks/{goal}?family_id=family',json={'status':'completed'}).status_code==409
+
+
+def test_revision_provider_failure_is_retryable_service_error(board,monkeypatch,auth_headers):
+    from fastapi.testclient import TestClient
+    from app import main
+    store,goal = board
+    manager=AsyncMock()
+    manager.revise.side_effect=RuntimeError('The AI provider did not respond within 60 seconds.')
+    monkeypatch.setattr(main,'task_store',store)
+    monkeypatch.setattr(main,'goal_tasks',manager)
+    response=TestClient(main.app,headers=auth_headers('family')).post(
+        f'/api/tasks/{goal}/revise?family_id=family',json={'instruction':'Continue the missing action.'})
+    assert response.status_code==503
+    assert response.json()['detail']=='The AI provider did not respond within 60 seconds.'
 
 
 def test_slow_event_subscriber_receives_invalidation():
