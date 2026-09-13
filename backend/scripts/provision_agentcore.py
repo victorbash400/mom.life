@@ -2,8 +2,10 @@
 from __future__ import annotations
 
 import argparse
+import base64
 import ipaddress
 import json
+import secrets
 from pathlib import Path
 from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
 from uuid import uuid4
@@ -70,12 +72,18 @@ def ensure_bucket(s3, account_id: str, region: str) -> str:
 
 def ensure_secret(client, environment: dict[str, str]) -> str:
     name = "mom-life/runtime-config"
-    payload = json.dumps(environment)
     try:
         current = client.describe_secret(SecretId=name)
+        previous = json.loads(client.get_secret_value(SecretId=name)["SecretString"])
+        environment.setdefault("MOM_LIFE_CONNECTION_KEY", previous.get("MOM_LIFE_CONNECTION_KEY", ""))
+        if not environment["MOM_LIFE_CONNECTION_KEY"]:
+            environment["MOM_LIFE_CONNECTION_KEY"] = base64.urlsafe_b64encode(secrets.token_bytes(32)).decode()
+        payload = json.dumps(environment)
         client.put_secret_value(SecretId=name, SecretString=payload)
         return current["ARN"]
     except client.exceptions.ResourceNotFoundException:
+        environment["MOM_LIFE_CONNECTION_KEY"] = base64.urlsafe_b64encode(secrets.token_bytes(32)).decode()
+        payload = json.dumps(environment)
         return client.create_secret(Name=name, Description="mom.life runtime configuration", SecretString=payload, Tags=tags(name))["ARN"]
 
 

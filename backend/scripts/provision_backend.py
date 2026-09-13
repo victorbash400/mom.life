@@ -160,7 +160,8 @@ def main() -> None:
         pass
     ecs = session.client("ecs")
     cluster_arn = ecs.create_cluster(clusterName="mom-life", tags=[{"key": "Project", "value": NAME}])["cluster"]["clusterArn"]
-    secret_keys = [key for key in environment if key not in {"MOM_LIFE_AWS_PROFILE", "MOM_LIFE_AGENTCORE_RUNTIME_ARN", "MOM_LIFE_AGENTCORE_MEMORY_ID"}]
+    secret_environment = json.loads(session.client("secretsmanager").get_secret_value(SecretId=state["config_secret_arn"])["SecretString"])
+    secret_keys = [key for key in secret_environment if key not in {"MOM_LIFE_AWS_PROFILE", "MOM_LIFE_AGENTCORE_RUNTIME_ARN", "MOM_LIFE_AGENTCORE_MEMORY_ID"}]
     task_definition = ecs.register_task_definition(
         family="mom-life-backend", taskRoleArn=task["Arn"], executionRoleArn=execution["Arn"], networkMode="awsvpc", requiresCompatibilities=["FARGATE"], cpu="512", memory="1024", runtimePlatform={"cpuArchitecture": "ARM64", "operatingSystemFamily": "LINUX"},
         containerDefinitions=[{"name": "api", "image": f"{repository}:{args.image_tag}", "essential": True, "portMappings": [{"containerPort": 8000, "protocol": "tcp", "name": "http"}], "environment": [{"name": "MOM_LIFE_AGENTCORE_RUNTIME_ARN", "value": state["runtime_arn"]}, {"name": "MOM_LIFE_AGENTCORE_MEMORY_ID", "value": state["memory_id"]}], "secrets": [{"name": key, "valueFrom": f"{state['config_secret_arn']}:{key}::"} for key in secret_keys], "logConfiguration": {"logDriver": "awslogs", "options": {"awslogs-group": "/ecs/mom-life-backend", "awslogs-region": region, "awslogs-stream-prefix": "api"}}}],

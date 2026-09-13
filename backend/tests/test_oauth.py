@@ -22,6 +22,15 @@ def configured(tmp_path,monkeypatch,handler):
     return store,OAuthConnections(store,httpx.MockTransport(handler))
 
 
+def test_configured_connection_key_avoids_local_key_file(tmp_path,monkeypatch):
+    key=base64.urlsafe_b64encode(b'k' * 32).decode()
+    monkeypatch.setenv('MOM_LIFE_CONNECTION_KEY',key)
+    store=TaskStore(tmp_path/'missing'/'oauth.db')
+    oauth=OAuthConnections(store)
+    assert oauth.cipher.decrypt(oauth.cipher.encrypt(b'token')) == b'token'
+    assert not (tmp_path/'missing'/'connection.key').exists()
+
+
 def test_pkce_callback_is_one_use_encrypted_and_family_bound(tmp_path,monkeypatch):
     def handler(request):
         fields=parse_qs(request.content.decode())

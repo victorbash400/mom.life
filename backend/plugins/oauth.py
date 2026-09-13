@@ -87,6 +87,10 @@ class OAuthConnections:
     def __init__(self,store,transport=None):
         self.store=store
         self.transport=transport
+        configured_key=setting('MOM_LIFE_CONNECTION_KEY')
+        if configured_key:
+            self.cipher=Fernet(configured_key.encode())
+            return
         key_path=store.path.parent/'connection.key'
         try:
             descriptor=os.open(key_path,os.O_WRONLY|os.O_CREAT|os.O_EXCL,0o600)
