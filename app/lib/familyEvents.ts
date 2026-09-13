@@ -15,6 +15,10 @@ function connect() {
   source.onmessage = ({ data }) => {
     try {
       const event = JSON.parse(data) as FamilyEvent;
+      if (event.type === "connection_error") {
+        subscribers.forEach(({ onConnection }) => onConnection(false));
+        return;
+      }
       subscribers.forEach(({ onEvent }) => onEvent(event));
     } catch {
       subscribers.forEach(({ onConnection }) => onConnection(false));
