@@ -1,0 +1,2 @@
+.sources { display: flex; flex-wrap: wrap; gap: 12px; margin-top: 16px; }
+.sources button { display: inline-flex; align-items: center; gap: 5px; padding: 0; border: 0; background: none; color: #978985; font: inherit; font-size: 10px; cursor: pointer; }

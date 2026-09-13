@@ -18,6 +18,7 @@ export function MomLifeShell() {
   const { family: { children } } = useFamily();
   const [mode, setMode] = useState<PanelMode>("home");
   const [selectedChildId, setSelectedChildId] = useState<string>();
+  const [incomingSelection, setIncomingSelection] = useState<string>();
   const [parentSettingsView, setParentSettingsView] = useState<ParentSettingsView>("profile");
   const connections = useToolConnections();
   const security = useSecurity(mode === "security");
@@ -30,7 +31,8 @@ export function MomLifeShell() {
   function openChildManagement() { setSelectedChildId(undefined); setParentSettingsView("children"); setMode("parent-settings"); }
   function openCalendar() { setSelectedChildId(undefined); setMode("calendar"); }
   function openTasks() { setSelectedChildId(undefined); setMode("tasks"); }
-  function openIncoming() { setSelectedChildId(undefined); setMode("incoming"); }
+  function openIncoming() { setIncomingSelection(undefined); setSelectedChildId(undefined); setMode("incoming"); }
+  function openEducationSource(id: string) { setIncomingSelection(id); setSelectedChildId(undefined); setMode("incoming"); }
   function openEducation() { setSelectedChildId((current) => current ?? children[0]?.id); setMode("education"); }
   function openSecurity() { setSelectedChildId(undefined); setMode("security"); }
   function openPlugins() { setSelectedChildId(undefined); setMode("plugins"); }
@@ -38,5 +40,5 @@ export function MomLifeShell() {
   function changeMode(next: PanelMode) { if (next === "parent-settings") setParentSettingsView("profile"); setMode(next); }
   function returnHome() { setSelectedChildId(undefined); setMode("home"); }
 
-  return <main className={styles.shell} data-mode={visibleMode}><AppHeader calendarOpen={visibleMode === "calendar"} educationOpen={visibleMode === "education"} incomingOpen={visibleMode === "incoming"} onCalendarOpen={openCalendar} onChildrenOpen={openChildManagement} onEducationOpen={openEducation} onIncomingOpen={openIncoming} onProfileOpen={openParent} pluginsOpen={visibleMode === "plugins"} onPluginsOpen={openPlugins} onSecurityOpen={openSecurity} onSimulatorOpen={openSimulator} onTasksOpen={openTasks} securityAlertCount={security.alertCount} securityOpen={visibleMode === "security"} simulatorOpen={visibleMode === "simulator"} tasksOpen={visibleMode === "tasks"} /><ChildSwitcher focused={mode === "child" || mode === "child-info" || mode === "education" || (mode === "tasks" && Boolean(selectedChild))} onSelect={selectChild} selectedId={selectedChildId} /><ActionPanel child={selectedChild} connections={connections} mode={visibleMode} onModeChange={changeMode} onReturnHome={returnHome} parentSettingsView={parentSettingsView} security={security} simulator={simulator} /></main>;
+  return <main className={styles.shell} data-mode={visibleMode}><AppHeader calendarOpen={visibleMode === "calendar"} educationOpen={visibleMode === "education"} incomingOpen={visibleMode === "incoming"} onCalendarOpen={openCalendar} onChildrenOpen={openChildManagement} onEducationOpen={openEducation} onIncomingOpen={openIncoming} onProfileOpen={openParent} pluginsOpen={visibleMode === "plugins"} onPluginsOpen={openPlugins} onSecurityOpen={openSecurity} onSimulatorOpen={openSimulator} onTasksOpen={openTasks} securityAlertCount={security.alertCount} securityOpen={visibleMode === "security"} simulatorOpen={visibleMode === "simulator"} tasksOpen={visibleMode === "tasks"} /><ChildSwitcher focused={mode === "child" || mode === "child-info" || mode === "education" || (mode === "tasks" && Boolean(selectedChild))} onSelect={selectChild} selectedId={selectedChildId} /><ActionPanel incomingSelection={incomingSelection} onSourceSelect={openEducationSource} child={selectedChild} connections={connections} mode={visibleMode} onModeChange={changeMode} onReturnHome={returnHome} parentSettingsView={parentSettingsView} security={security} simulator={simulator} /></main>;
 }
