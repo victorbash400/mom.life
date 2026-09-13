@@ -146,7 +146,7 @@ def main() -> None:
     iam.put_role_policy(RoleName=execution["RoleName"], PolicyName="mom-life-secrets", PolicyDocument=json.dumps({"Version": "2012-10-17", "Statement": [{"Effect": "Allow", "Action": "secretsmanager:GetSecretValue", "Resource": state["config_secret_arn"]}]}))
     task = role(iam, "mom-life-ecs-task", "ecs-tasks.amazonaws.com")
     task_statements = [
-        {"Effect": "Allow", "Action": ["bedrock-agentcore:InvokeAgentRuntime", "bedrock-agentcore:StopRuntimeSession"], "Resource": state["runtime_arn"]},
+        {"Effect": "Allow", "Action": ["bedrock-agentcore:InvokeAgentRuntime", "bedrock-agentcore:StopRuntimeSession"], "Resource": [state["runtime_arn"], f"{state['runtime_arn']}/runtime-endpoint/*"]},
         {"Effect": "Allow", "Action": ["bedrock-agentcore:GetEvent", "bedrock-agentcore:ListEvents"], "Resource": state["memory_arn"]},
         {"Effect": "Allow", "Action": ["scheduler:CreateSchedule", "scheduler:UpdateSchedule", "scheduler:GetSchedule", "scheduler:DeleteSchedule"], "Resource": f"arn:aws:scheduler:{region}:{account_id}:schedule/mom-life/*"},
     ]
@@ -178,9 +178,9 @@ def main() -> None:
     existing_service = next((arn for arn in services if arn.rsplit("/", 1)[-1] == "mom-life-backend"), None)
     network = {"awsvpcConfiguration": {"subnets": public_subnets, "securityGroups": [task_group], "assignPublicIp": "ENABLED"}}
     if existing_service:
-        ecs.update_service(cluster=cluster_arn, service="mom-life-backend", taskDefinition=task_definition, desiredCount=1, forceNewDeployment=True, healthCheckGracePeriodSeconds=120)
+        ecs.update_service(cluster=cluster_arn, service="mom-life-backend", taskDefinition=task_definition, desiredCount=1, forceNewDeployment=True, healthCheckGracePeriodSeconds=120, deploymentConfiguration={"minimumHealthyPercent": 100, "maximumPercent": 200})
     else:
-        ecs.create_service(cluster=cluster_arn, serviceName="mom-life-backend", taskDefinition=task_definition, desiredCount=1, launchType="FARGATE", platformVersion="LATEST", networkConfiguration=network, loadBalancers=[{"targetGroupArn": target_group, "containerName": "api", "containerPort": 8000}], healthCheckGracePeriodSeconds=120, deploymentConfiguration={"minimumHealthyPercent": 0, "maximumPercent": 100}, tags=[{"key": "Project", "value": NAME}], enableExecuteCommand=False)
+        ecs.create_service(cluster=cluster_arn, serviceName="mom-life-backend", taskDefinition=task_definition, desiredCount=1, launchType="FARGATE", platformVersion="LATEST", networkConfiguration=network, loadBalancers=[{"targetGroupArn": target_group, "containerName": "api", "containerPort": 8000}], healthCheckGracePeriodSeconds=120, deploymentConfiguration={"minimumHealthyPercent": 100, "maximumPercent": 200}, tags=[{"key": "Project", "value": NAME}], enableExecuteCommand=False)
     distribution_id, backend_domain, distribution_status = ensure_distribution(session.client("cloudfront"), alb_dns)
     state.update({"backend_repository": repository, "backend_image_tag": args.image_tag, "ecs_cluster": cluster_arn, "ecs_service": "mom-life-backend", "task_definition": task_definition, "alb_dns": alb_dns, "cloudfront_distribution_id": distribution_id, "backend_domain": backend_domain, "backend_url": f"https://{backend_domain}", "cloudfront_status": distribution_status})
     STATE.write_text(json.dumps(state, indent=2) + "\n")

@@ -49,7 +49,8 @@ class ToolEventRecorder:
 def create_mom_life_agent(session_id: str, tool_events: ToolEventRecorder | None = None, settings: Settings | None = None, family_id: str | None = None, session_manager=None) -> Agent:
     from tools.goal_supervisor import supervisor_tools
     config = settings or get_settings()
-    SESSION_DIRECTORY.mkdir(parents=True, exist_ok=True)
+    if session_manager is None:
+        SESSION_DIRECTORY.mkdir(parents=True, exist_ok=True)
     boto_session = boto3.Session(profile_name=config.aws_profile or None, region_name=config.strands_region)
     return Agent(
         agent_id="mom-life",
