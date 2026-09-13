@@ -11,6 +11,7 @@ from agents.model import FamilyBedrockModel as BedrockModel
 from strands.tools.executors import SequentialToolExecutor
 
 from app.config import Settings, get_settings
+from agents.agentcore_client import AgentCoreClient, runtime_session_id
 from agents.invocation import invoke
 from tools.family_tools import get_current_datetime
 
@@ -28,6 +29,21 @@ Complete only when every expected output has evidence. Include exact expected ou
 
 
 async def run_worker(prompt, plugins, on_progress: Callable, expected_outputs, store, goal_id, assignment_id, settings: Settings | None = None):
+    config = settings or get_settings()
+    if config.uses_agentcore_runtime:
+        return await AgentCoreClient(config).result(
+            "work",
+            {
+                "prompt": prompt,
+                "family_id": plugins.family_id,
+                "child_id": plugins.profile_id,
+                "goal_id": goal_id,
+                "assignment_id": assignment_id,
+                "plugin_ids": plugins.plugin_ids,
+                "expected_outputs": expected_outputs,
+            },
+            session_id=runtime_session_id("work", goal_id, assignment_id),
+        )
     result = {}
     agent_ref: dict[str, Agent] = {}
     finalizing = False
@@ -130,7 +146,6 @@ async def run_worker(prompt, plugins, on_progress: Callable, expected_outputs, s
         return {'status':'completed','instruction':'End this run now.'}
 
     from tools.automation_tools import automation_tools
-    config = settings or get_settings()
     session = boto3.Session(profile_name=config.aws_profile or None,region_name=config.strands_region)
     agent = Agent(name='mom_life_goal_worker', model=BedrockModel(boto_session=session,model_id=config.strands_model_id,temperature=0.2,max_tokens=config.model_max_tokens,service_tier=config.model_service_tier, additional_request_fields=config.model_request_fields),
                   system_prompt=WORKER_PROMPT, tools=[get_current_datetime,read_family_context,update_progress,ask_mom,wait_for_provider_event,load_goal_tools,call_plugin,notify_mom,complete_assignment,*automation_tools(plugins.family_id,goal_id)],

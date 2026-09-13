@@ -1,4 +1,7 @@
 import { sessionHeaders } from "../../../lib/session";
+
+export const maxDuration = 300;
+
 export async function POST(request: Request) {
   const backendUrl = process.env.MOM_LIFE_BACKEND_URL ?? "http://127.0.0.1:8000";
   try {

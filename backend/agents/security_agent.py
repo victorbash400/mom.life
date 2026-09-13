@@ -8,6 +8,7 @@ from agents.model import FamilyBedrockModel as BedrockModel
 from strands.tools.executors import SequentialToolExecutor
 
 from app.config import Settings, get_settings
+from agents.agentcore_client import AgentCoreClient, runtime_session_id
 from agents.invocation import invoke
 from app.task_store import TaskStore, now
 
@@ -25,6 +26,13 @@ Review only the configured sources and children. For item depth use only this it
 
 
 async def run_security_agent(store: TaskStore, family_id: str, review_id: str, settings: Settings | None = None) -> dict[str, object]:
+    config = settings or get_settings()
+    if config.uses_agentcore_runtime:
+        return await AgentCoreClient(config).result(
+            "security",
+            {"family_id": family_id, "review_id": review_id},
+            session_id=runtime_session_id("security", family_id, review_id),
+        )
     result: dict[str, object] = {}
     agent_ref: dict[str, Agent] = {}
 
@@ -104,7 +112,6 @@ async def run_security_agent(store: TaskStore, family_id: str, review_id: str, s
         agent_ref["agent"].cancel()
         return {"status": "completed", **result}
 
-    config = settings or get_settings()
     session = boto3.Session(profile_name=config.aws_profile or None, region_name=config.strands_region)
     agent = Agent(
         name="mom_life_safety_agent",

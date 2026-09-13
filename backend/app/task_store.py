@@ -130,6 +130,12 @@ class TaskStore(GoalLedger):
                     reminder_minutes INTEGER NOT NULL DEFAULT 30,
                     updated_at TEXT NOT NULL
                 );
+                CREATE TABLE IF NOT EXISTS chats (
+                    id TEXT PRIMARY KEY, family_id TEXT NOT NULL,
+                    title TEXT NOT NULL DEFAULT 'New chat',
+                    created_at TEXT NOT NULL, updated_at TEXT NOT NULL
+                );
+                CREATE INDEX IF NOT EXISTS chats_family_updated ON chats(family_id,updated_at);
             """)
             connection.executescript("""
                 CREATE TABLE IF NOT EXISTS goal_questions (

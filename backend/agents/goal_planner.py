@@ -8,6 +8,7 @@ from strands import Agent
 from agents.model import FamilyBedrockModel as BedrockModel
 
 from app.config import Settings, get_settings
+from agents.agentcore_client import AgentCoreClient, runtime_session_id
 from agents.invocation import invoke
 
 
@@ -42,6 +43,22 @@ Every assignment needs a complete operational instruction and exact, observable 
 
 async def plan_goal(request: str, child_id: str, skills: list[dict[str, object]], settings: Settings | None = None, existing_tasks: list[dict] | None = None, plugins: list[dict] | None = None) -> GoalPlan:
     config = settings or get_settings()
+    if config.uses_agentcore_runtime:
+        payload = {
+            "request": request,
+            "child_id": child_id,
+            "skills": skills,
+            "existing_tasks": existing_tasks or [],
+            "plugins": plugins or [],
+        }
+        result = await AgentCoreClient(config).result(
+            "plan",
+            payload,
+            session_id=runtime_session_id("plan", child_id, request),
+        )
+        plan = GoalPlan.model_validate(result)
+        _preserve_requested_output_labels(request, plan)
+        return plan
     session = boto3.Session(profile_name=config.aws_profile or None, region_name=config.strands_region)
     agent = Agent(
         name="mom_life_goal_planner",

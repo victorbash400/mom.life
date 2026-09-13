@@ -1,8 +1,14 @@
 from fastapi import APIRouter, HTTPException, Request
 from app.chat_sessions import ChatSessions
+from app.config import get_settings
 
 router = APIRouter(prefix='/api/chats')
-chats = ChatSessions()
+settings = get_settings()
+chats = ChatSessions(
+    database=settings.database_url if settings.uses_agentcore_runtime else "",
+    memory_id=settings.agentcore_memory_id,
+    region=settings.strands_region,
+)
 
 
 @router.get('')

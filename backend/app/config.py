@@ -24,6 +24,9 @@ class Settings(BaseSettings):
     automation_dlq_arn: str = ''
     automation_schedule_group: str = 'mom-life'
     cors_origins: str = "http://localhost:3000"
+    agentcore_runtime_arn: str = ""
+    agentcore_runtime_qualifier: str = "DEFAULT"
+    agentcore_memory_id: str = ""
 
     model_config = SettingsConfigDict(
         env_file=PROJECT_ROOT / "backend" / ".env",
@@ -40,6 +43,10 @@ class Settings(BaseSettings):
     @property
     def allowed_origins(self) -> list[str]:
         return [origin.strip() for origin in self.cors_origins.split(",") if origin.strip()]
+
+    @property
+    def uses_agentcore_runtime(self) -> bool:
+        return bool(self.agentcore_runtime_arn)
 
 
 @lru_cache
