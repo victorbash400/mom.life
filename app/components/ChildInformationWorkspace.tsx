@@ -8,6 +8,7 @@ import { ChildDataColumns } from "./ChildDataColumns";
 import { ChildDataGrid } from "./ChildDataGrid";
 import { ChildDataList } from "./ChildDataList";
 import { ChildDataToolbar } from "./ChildDataToolbar";
+import { LoadingIndicator } from "./LoadingIndicator";
 import styles from "./ChildInformationWorkspace.module.css";
 
 export function ChildInformationWorkspace({ profile, child = false, onBack }: { profile: PersonProfile; child?: boolean; onBack: () => void }) {
@@ -15,11 +16,12 @@ export function ChildInformationWorkspace({ profile, child = false, onBack }: { 
   const [folderId, setFolderId] = useState<string>();
   const [nodes, setNodes] = useState<ChildDataNode[]>([]);
   const [error, setError] = useState("");
+  const [loaded, setLoaded] = useState(false);
   const refresh = useCallback(async () => {
     const response = await fetch(`/api/family/children/${ownerId}/nodes`, { cache: "no-store" });
     if (!response.ok) throw new Error("Could not load files.");
     const next: ChildDataNode[] = await response.json();
-    setNodes(next);
+    setNodes(next); setLoaded(true);
     setFolderId((current) => next.some((node) => node.id === current) ? current : undefined);
     setError("");
   }, [ownerId]);
@@ -62,5 +64,5 @@ export function ChildInformationWorkspace({ profile, child = false, onBack }: { 
     setSelectedId(undefined);
   }
 
-  return <section className={styles.information}><ChildDataToolbar canGoBack childName={profile.name} folderName={folder?.name} onBack={back} onQueryChange={setQuery} onRoot={root} onSortChange={setSort} onViewChange={changeView} query={query} sort={sort} view={view} /><section className={styles.content}><FolderActions childId={ownerId} parentId={folderId} selected={selected} onSaved={async () => { await refresh(); setSelectedId(undefined); }} />{error ? <p role="alert">{error}</p> : null}{view === "grid" ? <ChildDataGrid nodes={visible} onOpen={open} /> : null}{view === "list" ? <ChildDataList nodes={visible} onOpen={open} selectedId={selectedId} /> : null}{view === "columns" ? <ChildDataColumns nodes={nodes} onSelect={open} selected={selected} /> : null}</section></section>;
+  return <section className={styles.information}><ChildDataToolbar canGoBack childName={profile.name} folderName={folder?.name} onBack={back} onQueryChange={setQuery} onRoot={root} onSortChange={setSort} onViewChange={changeView} query={query} sort={sort} view={view} /><section className={styles.content}>{error ? <p role="alert">{error}</p> : !loaded ? <LoadingIndicator /> : <><FolderActions childId={ownerId} parentId={folderId} selected={selected} onSaved={async () => { await refresh(); setSelectedId(undefined); }} />{view === "grid" ? <ChildDataGrid nodes={visible} onOpen={open} /> : null}{view === "list" ? <ChildDataList nodes={visible} onOpen={open} selectedId={selectedId} /> : null}{view === "columns" ? <ChildDataColumns nodes={nodes} onSelect={open} selected={selected} /> : null}</>}</section></section>;
 }

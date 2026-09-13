@@ -1,4 +1,4 @@
-.list { min-height: 0; overflow-y: auto; color: #4a403c; font-size: 12px; scrollbar-width: thin; }
+.list { min-height: 0; grid-row: 4; overflow-y: auto; color: #4a403c; font-size: 12px; scrollbar-width: thin; }
 .list ul { margin: 0; padding: 0; list-style: none; }
 .list > p { margin: 0 0 12px; }
 .row { display: flex; gap: 8px; padding: 12px 0; align-items: flex-start; }

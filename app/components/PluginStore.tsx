@@ -7,6 +7,7 @@ import { toolDirectory, toolGroups, type ToolDefinition } from "../data/toolDire
 import type { useToolConnections } from "../hooks/useToolConnections";
 import { ConnectedToolSection } from "./ConnectedToolSection";
 import { GoogleWorkspaceSection } from "./GoogleWorkspaceSection";
+import { LoadingIndicator } from "./LoadingIndicator";
 import { PluginStoreGroup } from "./PluginStoreGroup";
 import styles from "./PluginStore.module.css";
 
@@ -37,7 +38,7 @@ export function PluginStore({ connections, onBack }: { connections: Connections;
     setView(next);
   }
 
-  if (!connections.loaded) return <p className={styles.loading}>Loading plugins…</p>;
+  if (!connections.loaded) return connections.error ? <p className={styles.error} role="alert">{connections.error}</p> : <LoadingIndicator />;
 
   return <section aria-label="Plugins" className={styles.viewport}><div className={styles.store} data-view={view}>
     <header className={styles.heading}><span><button aria-label="Back to home" className={styles.back} onClick={onBack} type="button"><ArrowLeft aria-hidden="true" /></button><h1>{view === "plugins" ? "Plugins" : "Plugin directory"}</h1></span><button className={styles.browse} onClick={() => changeView(view === "plugins" ? "directory" : "plugins")} type="button">{view === "plugins" ? "Browse directory" : "Back to plugins"}</button></header>

@@ -6,6 +6,7 @@ import { SimulatorConnections } from "./SimulatorConnections";
 import { SimulatorDevice, type SimulatorView } from "./SimulatorDevice";
 import { SimulatorHealth } from "./SimulatorHealth";
 import { SimulatorWhatsApp } from "./SimulatorWhatsApp";
+import { LoadingIndicator } from "./LoadingIndicator";
 import { WorkspaceHeader } from "./WorkspaceHeader";
 import styles from "./SimulatorWorkspace.module.css";
 
@@ -17,6 +18,6 @@ export function SimulatorWorkspace({ onClose, simulator }: { onClose: () => void
   return <section className={styles.workspace}>
     <WorkspaceHeader onClose={onClose} title="Simulator" />
     {simulator.error ? <p className={styles.error} role="alert">{simulator.error}</p> : null}
-    <SimulatorDevice onViewChange={setView} view={view}>{view === "whatsapp" ? <SimulatorWhatsApp simulator={simulator} /> : view === "health" ? <SimulatorHealth simulator={simulator} /> : <SimulatorConnections simulator={simulator} />}</SimulatorDevice>
+    {simulator.state ? <SimulatorDevice onViewChange={setView} view={view}>{view === "whatsapp" ? <SimulatorWhatsApp simulator={simulator} /> : view === "health" ? <SimulatorHealth simulator={simulator} /> : <SimulatorConnections simulator={simulator} />}</SimulatorDevice> : !simulator.error ? <LoadingIndicator /> : null}
   </section>;
 }

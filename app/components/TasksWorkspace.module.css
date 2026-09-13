@@ -3,6 +3,7 @@
 .newTask:hover { background: #aa6963; box-shadow: inset 0 1px rgb(255 255 255 / 24%), 0 9px 22px rgb(106 62 57 / 17%); }
 .newTask svg { width: 14px; height: 14px; }
 .error { margin: 0; color: #a5322d; font-size: 11px; }
+.loading { grid-row: 4; }
 @media (max-width: 680px) { .workspace { inset: 22px 20px 20px; } }
 @keyframes workspace-in { from { opacity: 0; transform: translateY(12px) scale(.992); } to { opacity: 1; transform: none; } }
 @media (prefers-reduced-motion: reduce) { .workspace { animation: none; } }

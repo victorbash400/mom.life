@@ -18,6 +18,5 @@
 .error { margin: 18px 0 0; color: #a5322d; font-size: 10px; }
 .content { width: 100%; }
 .store[data-view="directory"] .content { padding-top: 34px; }
-.empty,.loading { margin: 64px 0; color: #92928e; font-size: 10px; text-align: center; }
-.loading { position: absolute; inset: 0; display: grid; margin: 0; place-items: center; }
+.empty { margin: 64px 0; color: #92928e; font-size: 10px; text-align: center; }
 @media (max-width: 680px) { .store,.store[data-view="directory"] { width: calc(100% - 32px); padding-top: 24px; }.heading { align-items: flex-start; }.browse { max-width: 130px; } }
