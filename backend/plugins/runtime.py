@@ -3,7 +3,6 @@ from plugins.configuration import setting
 from contextlib import ExitStack
 from typing import Any
 
-from mcp.client.streamable_http import streamablehttp_client
 from strands.tools.mcp import MCPClient
 
 from .catalog import plugin_by_id
@@ -94,7 +93,7 @@ class PluginToolSession:
         if not url.startswith('https://'):
             raise ValueError('Plugin endpoints must use HTTPS.')
         headers = {'X-Goog-Api-Key' if plugin_id == 'google-maps' else 'Authorization': token if plugin_id == 'google-maps' else f'Bearer {token}'}
-        client = MCPClient(lambda: streamablehttp_client(url, headers=headers, timeout=15))
+        client = MCPClient(url=url, headers=headers, startup_timeout=15)
         await asyncio.to_thread(self.stack.enter_context, client)
         self.clients[plugin_id] = client
         directory = []
