@@ -1,5 +1,6 @@
 import asyncio
 import json
+import re
 from datetime import UTC, datetime
 
 from agents.goal_planner import plan_goal
@@ -201,7 +202,8 @@ class GoalTaskManager:
                 plan_request = f"{request}\n\nCorrect the plan using the existing task ledger. The prior plan was invalid: {error}"
         assignments = await asyncio.to_thread(self.store.assignments, str(goal["id"]))
         selected = list(dict.fromkeys(identity for item in assignments if item["status"] != "cancelled" for identity in item["skill_ids"]))
-        plugins = list(dict.fromkeys(identity for item in assignments if item['status'] != 'cancelled' for identity in (item['plugin_ids'] or [p for s in item['skill_ids'] for p in valid[s]['required_plugin_ids']])))
+        planned_plugins = [identity for item in assignments if item['status'] != 'cancelled' for identity in (item['plugin_ids'] or [p for s in item['skill_ids'] for p in valid[s]['required_plugin_ids']])]
+        plugins = list(dict.fromkeys([*planned_plugins, *_named_plugins(request, states.values())]))
         await asyncio.to_thread(self.store.set_goal_state, str(goal["id"]),run_state="queued",current_step="Ready to begin",skill_ids=selected,plugin_ids=plugins)
         await asyncio.to_thread(self.store.add_activity, str(goal["id"]),"plan_revised" if instruction else "plan_created",instruction or "Created the assignment board",plan.model_dump())
         self._publish(family_id,str(goal["id"]))
@@ -299,3 +301,14 @@ def _resolve_skill_ids(references: list[str], skills: list[dict[str, object]]) -
         if identity not in resolved:
             resolved.append(identity)
     return resolved
+
+
+def _named_plugins(request: str, plugins) -> list[str]:
+    """Keep access to providers that Mom explicitly named in a durable task."""
+    text = request.casefold()
+    selected = []
+    for plugin in plugins:
+        aliases = {str(plugin["id"]).replace("-", " ").casefold(), str(plugin["name"]).casefold()}
+        if any(re.search(rf"(?<!\w){re.escape(alias)}(?!\w)", text) for alias in aliases):
+            selected.append(str(plugin["id"]))
+    return selected

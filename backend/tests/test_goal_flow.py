@@ -157,18 +157,18 @@ def test_prepared_automation_goal_keeps_planned_provider_access(tmp_path, monkey
     from app import goal_tasks
 
     store = TaskStore(tmp_path / 'prepared-automation.db')
-    goal = store.create('family', 'child', 'Watch sleep and notify through WhatsApp')
+    goal = store.create('family', 'child', 'Watch Fitbit sleep and notify through WhatsApp and Todoist')
 
     async def plan(*args, **kwargs):
         return GoalPlan(operations=[AssignmentPlan(
             action='create', key='watch', title='Watch sleep',
             instruction='Read Fitbit and notify through WhatsApp when needed.',
-            plugin_ids=['fitbit', 'whatsapp'], expected_outputs=['Monitoring check'],
+            plugin_ids=['fitbit'], expected_outputs=['Monitoring check'],
         )])
 
     monkeypatch.setattr(goal_tasks, 'plan_goal', plan)
     asyncio.run(GoalTaskManager(store).prepare('family', goal['id']))
     saved = store.get('family', goal['id'])
     assert saved['run_state'] == 'waiting'
-    assert saved['plugin_ids'] == ['fitbit', 'whatsapp']
+    assert saved['plugin_ids'] == ['fitbit', 'todoist', 'whatsapp']
     assert saved['assignments'][0]['status'] == 'queued'
