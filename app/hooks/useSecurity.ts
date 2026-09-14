@@ -58,7 +58,7 @@ export function useSecurity(enabled = true) {
     const load = enabled ? refresh : refreshCount;
     const frame = requestAnimationFrame(() => void load());
     const unsubscribe = subscribeFamilyEvents({
-      onEvent: (event) => { if (event.type === "security_changed") void load(); },
+      onEvent: (event) => { if (event.type === "security_changed") void refresh(); },
       onConnection: (connected) => {
         if (!connected) return setError("Live safety updates are disconnected. Reconnecting…");
         if (connectedOnce.current) void load();

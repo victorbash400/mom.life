@@ -1,10 +1,14 @@
 "use client";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { subscribeFamilyEvents } from "../lib/familyEvents";
+import { useFamily } from "../components/FamilyProvider";
 import type { AutomationState } from "../types/automations";
 
+const automationCache = new Map<string, AutomationState>();
+
 export function useAutomations() {
-  const [state, setState] = useState<AutomationState>();
+  const { family } = useFamily();
+  const [state, setState] = useState<AutomationState | undefined>(() => automationCache.get(family.id));
   const [error, setError] = useState("");
   const revision = useRef(0);
   const refresh = useCallback(async () => {
@@ -13,9 +17,9 @@ export function useAutomations() {
       const response = await fetch("/api/automations", { cache: "no-store" });
       const payload = await response.json();
       if (!response.ok) throw new Error(payload.error || "Could not load automations.");
-      if (version === revision.current) { setState(payload); setError(""); }
+      if (version === revision.current) { automationCache.set(family.id, payload); setState(payload); setError(""); }
     } catch (cause) { if (version === revision.current) setError(cause instanceof Error ? cause.message : "Could not load automations."); }
-  }, []);
+  }, [family.id]);
   useEffect(() => {
     void Promise.resolve().then(refresh);
     const requestRevision = revision;

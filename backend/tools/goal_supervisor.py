@@ -32,8 +32,8 @@ def supervisor_tools(family_id):
     def get_family_context() -> dict:
         """Read the authoritative parent and child profiles when family identity matters."""
         from app.auth import families
-        parent, children = families.snapshot(family_id)
-        return {"parent": dict(parent), "children": [dict(child) for child in children]}
+        from tools.family_tools import family_context
+        return family_context(families, family_id)
 
     from tools.automation_tools import automation_tools
     return [list_goal_tasks,create_family_goal,revise_goal_plan,get_family_context,*automation_tools(family_id)]
