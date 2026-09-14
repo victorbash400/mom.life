@@ -74,6 +74,28 @@ class GoalTaskManager:
         if worker and worker is not asyncio.current_task():
             await asyncio.shield(worker)
 
+    async def prepare(self, family_id: str, goal_id: str) -> None:
+        """Plan a dormant goal so later automation runs inherit its tools."""
+        async with self._capacity:
+            lease = await asyncio.to_thread(acquire, self.store.path, goal_id)
+            if lease is None:
+                raise ValueError("This goal is running in another backend process.")
+            try:
+                goal = await asyncio.to_thread(self.store.get, family_id, goal_id)
+                if not goal:
+                    raise ValueError("Goal not found.")
+                if not (await asyncio.to_thread(self.store.assignments, goal_id)):
+                    await self._plan(family_id, goal)
+                await asyncio.to_thread(
+                    self.store.set_goal_state,
+                    goal_id,
+                    run_state="waiting",
+                    current_step="Waiting for an automation trigger",
+                )
+                self._publish(family_id, goal_id)
+            finally:
+                release(lease)
+
     async def revise(self, family_id: str, goal_id: str, instruction: str) -> None:
         async with self._revisions.setdefault(goal_id, asyncio.Lock()):
             goal = await asyncio.to_thread(self.store.get, family_id, goal_id)

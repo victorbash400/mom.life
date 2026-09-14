@@ -151,3 +151,24 @@ def test_assignment_preserves_requested_providers_without_custom_skills(tmp_path
     assert saved['assignments'][0]['permitted_namespaces'] == ['fitbit', 'whatsapp']
     assert saved['assignments'][0]['plugin_ids'] == ['fitbit', 'whatsapp']
     assert saved['status'] == 'completed'
+
+
+def test_prepared_automation_goal_keeps_planned_provider_access(tmp_path, monkeypatch):
+    from app import goal_tasks
+
+    store = TaskStore(tmp_path / 'prepared-automation.db')
+    goal = store.create('family', 'child', 'Watch sleep and notify through WhatsApp')
+
+    async def plan(*args, **kwargs):
+        return GoalPlan(operations=[AssignmentPlan(
+            action='create', key='watch', title='Watch sleep',
+            instruction='Read Fitbit and notify through WhatsApp when needed.',
+            plugin_ids=['fitbit', 'whatsapp'], expected_outputs=['Monitoring check'],
+        )])
+
+    monkeypatch.setattr(goal_tasks, 'plan_goal', plan)
+    asyncio.run(GoalTaskManager(store).prepare('family', goal['id']))
+    saved = store.get('family', goal['id'])
+    assert saved['run_state'] == 'waiting'
+    assert saved['plugin_ids'] == ['fitbit', 'whatsapp']
+    assert saved['assignments'][0]['status'] == 'queued'

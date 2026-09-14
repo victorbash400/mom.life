@@ -19,7 +19,7 @@ def supervisor_tools(family_id):
         if start_now:
             await goal_tasks.start(family_id,goal['id'])
         else:
-            task_store.set_goal_state(goal["id"],run_state="waiting",current_step="Waiting for an automation trigger")
+            await goal_tasks.prepare(family_id, goal["id"])
         return task_store.get(family_id,goal["id"])
 
     @tool
