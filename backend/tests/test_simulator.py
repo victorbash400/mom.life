@@ -134,3 +134,41 @@ def test_simulated_providers_are_connected_and_callable_by_assignments(tmp_path,
     asyncio.run(instacart.load("instacart"))
     result = asyncio.run(instacart.call("instacart", "prepare_shopping_list", {"items": "milk, apples"}, "shopping"))
     assert result["data"]["action"] == "prepare_shopping_list"
+
+
+def test_child_inbox_message_preserves_sender_without_resuming_child_reply(tmp_path, monkeypatch, auth_headers):
+    from app import auth, main
+    from app.provider_events import ProviderEvents
+
+    store = TaskStore(tmp_path / "inboxes.db")
+    families = Families()
+    monkeypatch.setattr(main, "task_store", store)
+    monkeypatch.setattr(main, "intake_agent", SimpleNamespace(route_received=AsyncMock()))
+    monkeypatch.setattr(main, "goal_tasks", SimpleNamespace(start=AsyncMock()))
+    monkeypatch.setattr(auth, "families", families)
+    service = SimulatorService(store, families)
+    service.connect("family", "whatsapp")
+    goal = store.create("family", "child", "Wait for Noah's reply")
+    assignment = store.create_assignment(goal["id"], {"title": "Ask Noah", "instruction": "Await reply", "expected_outputs": ["Reply"]})
+    store.set_assignment(assignment, status="blocked")
+    ProviderEvents(store).wait("family", goal["id"], assignment, "whatsapp", "sim:child")
+
+    response = TestClient(main.app).post("/api/simulator/whatsapp/messages", headers=auth_headers("family"),
+        json={"profile_id": "child", "sender": "Game player", "text": "Send me your password."})
+    assert response.status_code == 201
+    assert response.json()["message"]["sender"] == "Game player"
+    assert store.assignment(assignment)["status"] == "blocked"
+    item = store.incoming_items("family")[0]
+    assert item["sender"] == "Game player"
+    assert item["payload"]["recipient_id"] == "child"
+    assert item["payload"]["child_id"] == "child"
+    state = service.state("family")
+    assert state["messages"][0]["profile_id"] == "child"
+    assert state["messages"][0]["sender"] == "Game player"
+    assert len({profile["phone_number"] for profile in state["profiles"]}) == 3
+
+    reply = TestClient(main.app).post("/api/simulator/whatsapp/messages", headers=auth_headers("family"),
+        json={"profile_id": "child", "text": "I'm done."})
+    assert reply.status_code == 201
+    assert store.assignment(assignment)["status"] == "queued"
+    main.goal_tasks.start.assert_awaited_once_with("family", goal["id"])

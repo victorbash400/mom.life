@@ -24,6 +24,7 @@ class SimulatorService:
                 raise ValueError("Family account not found.")
             profiles = [{"id": "parent", "name": parent["name"], "role": "adult"}]
             profiles.extend({"id": child["id"], "name": child["name"], "role": "child"} for child in self.families.list_children(family_id))
+            profiles = self._profile_numbers(profiles)
             connected = self.store.simulator_plugins(family_id)
             return {
                 "profiles": profiles,
@@ -38,7 +39,7 @@ class SimulatorService:
                 parent_cursor = db.execute('SELECT name FROM accounts WHERE family_id=? ORDER BY created_at LIMIT 1', (family_id,))
                 children_cursor = db.execute('SELECT id,name FROM children WHERE family_id=? ORDER BY created_at,id', (family_id,))
                 connected_cursor = db.execute('SELECT plugin_id FROM simulator_connections WHERE family_id=?', (family_id,))
-                messages_cursor = db.execute('SELECT * FROM simulator_messages WHERE family_id=? ORDER BY created_at DESC LIMIT 80', (family_id,))
+                messages_cursor = db.execute('''SELECT m.*,e.payload AS event_payload FROM simulator_messages m LEFT JOIN provider_events e ON e.id=m.provider_event_id AND e.family_id=m.family_id WHERE m.family_id=? ORDER BY m.created_at DESC LIMIT 80''', (family_id,))
                 health_cursor = db.execute("""SELECT child_id,sample_type,start_at,end_at,value,unit FROM apple_health_samples
                     WHERE family_id=? AND substr(start_at,1,10)=? AND source='mom.life Simulator'""", (family_id, target_date))
             parent = parent_cursor.fetchone()
@@ -51,11 +52,15 @@ class SimulatorService:
         profiles = [{"id": "parent", "name": parent["name"], "role": "adult"}]
         profiles.extend({"id": child["id"], "name": child["name"], "role": "child"} for child in children)
         return {
-            "profiles": profiles,
+            "profiles": self._profile_numbers(profiles),
             "connections": [{"id": plugin_id, "connected": plugin_id in connected} for plugin_id in sorted(SIMULATED_PLUGINS)],
-            "messages": [dict(row) for row in reversed(messages)],
+            "messages": self.store.simulator_message_rows(reversed(messages)),
             "health": self._health_summary(target_date, health),
         }
+
+    @staticmethod
+    def _profile_numbers(profiles):
+        return [{**profile, "phone_number": f"+1 202-555-01{index:02d}"} for index, profile in enumerate(profiles)]
 
     def connect(self, family_id, plugin_id):
         self._require_supported(plugin_id)

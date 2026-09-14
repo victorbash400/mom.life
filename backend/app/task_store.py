@@ -802,7 +802,7 @@ class TaskStore(GoalLedger):
         """Persist one simulated provider event, message, and its review jobs atomically."""
         timestamp = now()
         message_id = str(uuid4())
-        message = {"id": message_id, "family_id": family_id, "profile_id": profile_id, "direction": "incoming", "body": body, "provider_event_id": event_id, "created_at": timestamp}
+        message = {"id": message_id, "family_id": family_id, "profile_id": profile_id, "direction": "incoming", "body": body, "provider_event_id": event_id, "created_at": timestamp, "sender": sender, "inbox_message": bool(payload.get("inbox_message")) if isinstance(payload, dict) else False}
         with self._connect() as connection:
             connection.execute("BEGIN IMMEDIATE")
             connected = connection.execute(
@@ -812,7 +812,7 @@ class TaskStore(GoalLedger):
                 raise ValueError("Connect WhatsApp Simulator first.")
             if connection.execute("SELECT id FROM provider_events WHERE id=?", (event_id,)).fetchone():
                 return {"created": False, "duplicate": True, "matched": False, "goal_ids": []}
-            correlation = f"sim:{profile_id}"
+            correlation = payload.get("from", f"sim:{profile_id}") if isinstance(payload, dict) else f"sim:{profile_id}"
             connection.execute("INSERT INTO provider_events VALUES (?,?,?,?,?,?)",
                 (event_id, family_id, "whatsapp", correlation, json.dumps(payload, default=str), timestamp))
             from app.automation_store import AutomationStore
@@ -844,7 +844,7 @@ class TaskStore(GoalLedger):
                 """SELECT id FROM incoming_items
                 WHERE family_id=? AND source='whatsapp' AND correlation=? AND sender=? AND subject='' AND content=? AND created_at>=?
                 ORDER BY created_at DESC LIMIT 1""",
-                (family_id, f"sim:{profile_id}", sender, body, (datetime.now(UTC) - timedelta(minutes=5)).isoformat()),
+                (family_id, correlation, sender, body, (datetime.now(UTC) - timedelta(minutes=5)).isoformat()),
             ).fetchone()
             if replay:
                 return {"created": False, "duplicate": False, "matched": False, "goal_ids": [], "incoming_id": replay["id"], "message": message}
@@ -853,7 +853,7 @@ class TaskStore(GoalLedger):
                 """INSERT INTO incoming_items
                 (id,family_id,source,provider_event_id,correlation,sender,subject,content,payload,status,created_at)
                 VALUES (?,?, 'whatsapp', ?,?,?, '',?,?,'queued',?)""",
-                (incoming_id, family_id, event_id, f"sim:{profile_id}", sender, body, json.dumps(payload, default=str), timestamp),
+                (incoming_id, family_id, event_id, correlation, sender, body, json.dumps(payload, default=str), timestamp),
             )
             connection.execute("INSERT INTO intake_activities VALUES (?,?,?,?,?,?)",
                 (str(uuid4()), incoming_id, "received", "Received information from whatsapp.", "{}", timestamp))
@@ -871,10 +871,23 @@ class TaskStore(GoalLedger):
     def simulator_messages(self, family_id: str, limit: int = 80) -> list[dict[str, object]]:
         with self._connect() as connection:
             rows = connection.execute(
-                "SELECT * FROM simulator_messages WHERE family_id=? ORDER BY created_at DESC LIMIT ?",
+                """SELECT m.*,e.payload AS event_payload FROM simulator_messages m
+                LEFT JOIN provider_events e ON e.id=m.provider_event_id AND e.family_id=m.family_id
+                WHERE m.family_id=? ORDER BY m.created_at DESC LIMIT ?""",
                 (family_id, limit),
             ).fetchall()
-        return [dict(row) for row in reversed(rows)]
+        return self.simulator_message_rows(reversed(rows))
+
+    @staticmethod
+    def simulator_message_rows(rows):
+        messages = []
+        for row in rows:
+            message = dict(row)
+            payload = json.loads(message.pop("event_payload", None) or "{}")
+            message["sender"] = payload.get("sender", "")
+            message["inbox_message"] = bool(payload.get("inbox_message"))
+            messages.append(message)
+        return messages
 
     def add_simulator_action(self, family_id: str, plugin_id: str, action: str, detail: object) -> dict[str, object]:
         identity = str(uuid4())

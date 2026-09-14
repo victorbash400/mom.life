@@ -14,6 +14,7 @@ router = APIRouter(prefix="/api/simulator")
 class SimulatedMessage(BaseModel):
     profile_id: str = Field(min_length=1, max_length=128)
     text: str = Field(min_length=1, max_length=4000)
+    sender: str | None = Field(default=None, min_length=1, max_length=128)
 
 
 class SimulatedHealth(BaseModel):
@@ -61,12 +62,16 @@ async def send_message(body: SimulatedMessage, request: Request, background_task
     profile = families.profile(family_id) if body.profile_id == "parent" else families.child(family_id, body.profile_id)
     if not profile:
         raise HTTPException(404, "Simulated family profile not found.")
+    if body.sender is not None and not body.sender.strip():
+        raise HTTPException(400, "Enter a message sender.")
+    sender = body.sender.strip() if body.sender is not None else profile["name"]
+    correlation = f"sim:{body.profile_id}" if body.sender is None else f"sim:{body.profile_id}:contact:{sender}"
     event_id = f"sim-wa-{uuid4()}"
-    payload = {"id": event_id, "from": f"sim:{body.profile_id}", "text": {"body": body.text.strip()}, "simulated": True, "profile_id": body.profile_id,
+    payload = {"id": event_id, "from": correlation, "sender": sender, "recipient_id": body.profile_id, "inbox_message": body.sender is not None, "text": {"body": body.text.strip()}, "simulated": True, "profile_id": body.profile_id,
                "child_id": body.profile_id if body.profile_id != "parent" else ""}
     try:
         routed = await asyncio.to_thread(task_store.receive_simulator_incoming, family_id, body.profile_id,
-            f"{profile['name']} (Simulator)", body.text.strip(), event_id, payload)
+            sender, body.text.strip(), event_id, payload)
     except ValueError as error:
         raise HTTPException(409, str(error)) from error
     background_tasks.add_task(_route_message, family_id, routed, intake_agent, goal_tasks, automations, family_events)

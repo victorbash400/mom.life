@@ -37,12 +37,12 @@ export function useSimulator(afterMutation?: () => Promise<void>, enabled = true
     } catch (reason) { setError(message(reason)); throw reason; }
     finally { setBusy(false); }
   }
-  async function sendWhatsApp(profileId: string, text: string) {
-    const optimistic: SimulatorMessage = { id: crypto.randomUUID(), profile_id: profileId, direction: "incoming", body: text, created_at: new Date().toISOString() };
+  async function sendWhatsApp(profileId: string, text: string, sender?: string) {
+    const optimistic: SimulatorMessage = { id: crypto.randomUUID(), profile_id: profileId, direction: "incoming", body: text, sender, inbox_message: sender !== undefined, created_at: new Date().toISOString() };
     setError(undefined);
     setState((current) => current ? { ...current, messages: [...current.messages, optimistic] } : current);
     try {
-      const response = await fetch("/api/simulator/whatsapp/messages", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ profile_id: profileId, text }) });
+      const response = await fetch("/api/simulator/whatsapp/messages", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ profile_id: profileId, text, sender }) });
       if (!hasSession(response)) return;
       const payload = await response.json() as { message?: SimulatorMessage; error?: string };
       if (!response.ok || !payload.message) throw new Error(payload.error || "The message could not be sent.");
